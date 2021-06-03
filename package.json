@@ -1,0 +1,30 @@
+{
+  "name": "auth3000",
+  "version": "0.1.0",
+  "description": "Another of AJ's Auth libraries",
+  "main": "index.js",
+  "files": ["lib"],
+  "scripts": {
+    "test": "bash ./test.sh"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/therootcompany/auth3000.git"
+  },
+  "author": "AJ ONeal <coolaj86@gmail.com> (https://coolaj86.com/)",
+  "license": "MPL-2.0",
+  "bugs": {
+    "url": "https://github.com/therootcompany/auth3000/issues"
+  },
+  "homepage": "https://github.com/therootcompany/auth3000#readme",
+  "dependencies": {
+    "@root/async-router": "^1.0.8",
+    "body-parser": "^1.19.0",
+    "cookie-parser": "^1.4.5",
+    "dotenv": "^10.0.0",
+    "express": "^4.17.1",
+    "keyfetch": "^1.2.1",
+    "keypairs": "^1.2.14",
+    "morgan": "^1.10.0"
+  }
+}
