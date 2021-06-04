@@ -1,3 +1,9 @@
+# NOTE
+
+I made this public because I'm live-streaming the creation of it, not because it's ready for consumption:
+
+LIVE CODING Recordings: https://www.youtube.com/playlist?list=PLxki0D-ilnqYmidRxvrQoF2jX67wH5OS0
+
 # auth3000
 
 Yet another auth library by AJ
