@@ -174,7 +174,7 @@ app.use("/", function defaultErrorHandler(err, req, res, next) {
 //
 let server = express().use("/", app);
 if (require.main === module) {
-  let port = process.env.PORT || 3042;
+  let port = process.env.PORT || 3000;
   http.createServer(server).listen(port, function () {
     /* jshint validthis:true */
     console.info("Listening on", this.address());
