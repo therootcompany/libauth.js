@@ -11,7 +11,14 @@ Request
 ```txt
 POST /api/auth/session
 
-{ "user": "john.doe@gmail.com", "pass": "secret", "account": 0 }
+```
+
+```json
+{
+  "user": "john.doe@gmail.com",
+  "pass": "secret",
+  "account": 0
+}
 ```
 
 Response
@@ -20,9 +27,12 @@ Response
 200 OK
 Set-Cookie: xxxxx
 
+```
+
+```json
 {
-    "id_token": "xxxx.yyyy.zzzz",
-    "access_token": "xxxx.yyyy.zzzz"
+  "id_token": "xxxx.yyyy.zzzz",
+  "access_token": "xxxx.yyyy.zzzz"
 }
 ```
 
@@ -34,6 +44,9 @@ Request
 POST /api/authn/refresh
 Cookie: xxxxx
 
+```
+
+```json
 { "account": 0 }
 ```
 
@@ -43,9 +56,12 @@ Response
 200 OK
 Set-Cookie: xxxxx
 
+```
+
+```json
 {
-    "id_token": "xxxx.yyyy.zzzz",
-    "access_token": "xxxx.yyyy.zzzz"
+  "id_token": "xxxx.yyyy.zzzz",
+  "access_token": "xxxx.yyyy.zzzz"
 }
 ```
 
@@ -57,6 +73,9 @@ Request
 POST /api/authn/exchange
 Authorization: Bearer <token>
 
+```
+
+```json
 { "account": 0 }
 ```
 
@@ -65,7 +84,10 @@ Response
 ```txt
 200 OK
 
+```
+
+```json
 {
-    "access_token": "xxxx.yyyy.zzzz"
+  "access_token": "xxxx.yyyy.zzzz"
 }
 ```
