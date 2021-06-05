@@ -97,3 +97,9 @@ Response
   "access_token": "xxxx.yyyy.zzzz"
 }
 ```
+
+# Resources
+
+- [Live Recordings](https://www.youtube.com/playlist?list=PLxki0D-ilnqYmidRxvrQoF2jX67wH5OS0) of the making of this project
+- [Express Cookies Cheat Sheet](https://github.com/BeyondCodeBootcamp/beyondcodebootcamp.com/blob/main/articles/express-cookies-cheatsheet.md)
+- [How to add Google Sign In](https://therootcompany.com/blog/google-sign-in-javascript-api/)
