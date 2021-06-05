@@ -1,3 +1,10 @@
+public/js/env.js
+.env
+.env.*
+*.env
+*.env.*
+!example.env
+
 cookies.jar
 *.jwk.*
 *.pem

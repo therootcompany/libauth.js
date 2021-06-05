@@ -169,6 +169,12 @@ app.use("/", function defaultErrorHandler(err, req, res, next) {
   res.end("Internal Server Error");
 });
 
+// Dev / Localhost Local File Server
+if ("DEVELOPMENT" === process.env.ENV) {
+  let path = require("path");
+  app.use("/", express.static(path.join(__dirname, "public")));
+}
+
 //
 // Server setup / Router export
 //

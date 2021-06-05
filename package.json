@@ -5,6 +5,7 @@
   "main": "index.js",
   "files": ["lib"],
   "scripts": {
+    "genenv": "node ./genenv.js",
     "test": "bash ./test.sh"
   },
   "repository": {
