@@ -16,13 +16,43 @@ Request
 
 ```txt
 POST /api/auth/session
-
+Authentication: Basic <base64hash>
 ```
 
 ```json
 {
   "user": "john.doe@gmail.com",
   "pass": "secret",
+  "account": 0
+}
+```
+
+Response
+
+```txt
+200 OK
+Set-Cookie: xxxxx
+
+```
+
+```json
+{
+  "id_token": "xxxx.yyyy.zzzz",
+  "access_token": "xxxx.yyyy.zzzz"
+}
+```
+
+## POST /api/authn/session/oidc/google.com
+
+Request
+
+```txt
+POST /api/authn/session/oidc/google.com
+Authorization: Bearer <token>
+```
+
+```json
+{
   "account": 0
 }
 ```
