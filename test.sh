@@ -15,6 +15,20 @@ curl -fsSL http://localhost:"${PORT}"/hello
 echo ''
 
 echo ''
+echo 'Expecting to exchange Google Token'
+curl -sSL -v -X POST http://localhost:"${PORT}"/api/authn/session/oidc/google.com \
+    -H "Authorization: Bearer ${GOOGLE_TEST_TOKEN}" |
+    jq -r '.id_token'
+my_access_token="$(
+    curl -sSL -X POST http://localhost:"${PORT}"/api/authn/session/oidc/google.com \
+        -H "Authorization: Bearer ${GOOGLE_TEST_TOKEN}" |
+        jq -r '.id_token'
+)"
+echo "'${my_access_token}'"
+keypairs inspect "${my_access_token}" > /dev/null
+echo ''
+
+echo ''
 echo 'Expecting cookies and id_token'
 curl -fsSL -X POST http://localhost:"${PORT}"/api/authn/session \
     -b cookies.jar -c cookies.jar \
@@ -25,9 +39,12 @@ echo ''
 # Should give error
 echo ''
 echo 'Expecting Error:'
-curl -sSL -X POST http://localhost:"${PORT}"/api/authn/refresh
+curl -sSL -X POST http://localhost:"${PORT}"/api/authn/refresh \
+    -b cookies.jar -c cookies.jar |
+    jq -r '.id_token'
 echo ''
 
+curl -sSL -v -X POST http://localhost:"${PORT}"/api/authn/refresh
 my_token="$(
     curl -sSL -X POST http://localhost:"${PORT}"/api/authn/refresh \
         -b cookies.jar -c cookies.jar |

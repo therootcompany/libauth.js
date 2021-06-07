@@ -18,7 +18,11 @@
 
   function die(err) {
     console.error(err);
-    window.alert("Unexpected Error:" + err.message);
+    window.alert(
+      "Oops! There was an unexpected error on the server.\nIt's not your fault.\n\n" +
+        "Technical Details for Tech Support: \n" +
+        err.message
+    );
     throw err;
   }
 
@@ -63,7 +67,7 @@
     return query;
   }
 
-  function parseJwt(jwt) {
+  async function parseJwt(jwt) {
     var parts = jwt.split(".");
     var jws = {
       protected: parts[0],
@@ -129,10 +133,15 @@
 
   let jws = await parseJwt(query.id_token).catch(die);
 
-  if ("https://accounts.google.com" === jws.iss) {
+  if ("https://accounts.google.com" === jws.claims.iss) {
     // TODO make sure we've got the right options for fetch !!!
     let resp = await window
-      .fetch(baseUrl + "/api/authn/session/oidc/google.com", { method: "POST" })
+      .fetch(baseUrl + "/api/authn/session/oidc/google.com", {
+        method: "POST",
+        headers: {
+          authorization: query.id_token,
+        },
+      })
       .catch(die);
     let result = await resp.json().catch(die);
 
