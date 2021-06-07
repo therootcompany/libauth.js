@@ -106,52 +106,86 @@
     return await resp.json().catch(die);
   }
 
-  var url = generateOidcUrl(
-    ENV.GOOGLE_CLIENT_ID,
-    ENV.GOOGLE_REDIRECT_URI,
-    "email profile"
-    // "JOHN.DOE@EXAMPLE.COM"
-  );
-
-  $(".js-google-oidc-url").href = url;
-
-  var querystring = document.location.hash.slice(1);
-  var query = parseQuerystring(querystring);
-  if (!query.id_token) {
-    let result = await attemptRefresh();
+  function doStuffWithUser(result) {
     if (!result.id_token && !result.access_token) {
-      $(".js-google-oidc-url").hidden = false;
-    }
-    console.log("Refresh Token: (may be empty)");
-    console.log(result);
-    // TODO carry on with token...
-    return;
-  }
-
-  // Show the token for easy capture
-  console.log("id_token", query.id_token);
-
-  let jws = await parseJwt(query.id_token).catch(die);
-
-  if ("https://accounts.google.com" === jws.claims.iss) {
-    // TODO make sure we've got the right options for fetch !!!
-    let resp = await window
-      .fetch(baseUrl + "/api/authn/session/oidc/google.com", {
-        method: "POST",
-        headers: {
-          authorization: query.id_token,
-        },
-      })
-      .catch(die);
-    let result = await resp.json().catch(die);
-
-    console.log("Our bespoken token(s):");
-    console.log(result);
-
-    if (result.id_token || result.access_token) {
-      window.alert("Congrats! You win! (check the console for your token)");
-    } else {
       window.alert("No token, something went wrong.");
+      return;
+    }
+    $(".js-logout").hidden = false;
+    window.alert("Congrats! You win! (check the console for your token)");
+  }
+
+  async function init() {
+    $(".js-logout").hidden = true;
+    $(".js-google-oidc-url").hidden = true;
+
+    var url = generateOidcUrl(
+      ENV.GOOGLE_CLIENT_ID,
+      ENV.GOOGLE_REDIRECT_URI,
+      "email profile"
+      // "JOHN.DOE@EXAMPLE.COM"
+    );
+
+    $(".js-google-oidc-url").href = url;
+    $(".js-logout").addEventListener("click", async function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+
+      let resp = await window
+        .fetch(baseUrl + "/api/authn/session", {
+          method: "DELETE",
+        })
+        .catch(die);
+      let result = await resp.json().catch(die);
+      window.alert("Logged out!");
+      init();
+    });
+
+    var querystring = document.location.hash.slice(1);
+    var query = parseQuerystring(querystring);
+    if (!query.id_token) {
+      let result = await attemptRefresh();
+      console.log("Refresh Token: (may be empty)");
+      console.log(result);
+
+      if (result.id_token || result.access_token) {
+        doStuffWithUser(result);
+        return;
+      }
+
+      $(".js-google-oidc-url").hidden = false;
+      return;
+    }
+
+    window.history.pushState(
+      "",
+      document.title,
+      window.location.pathname + window.location.search
+    );
+
+    // Show the token for easy capture
+    console.log("id_token", query.id_token);
+
+    let jws = await parseJwt(query.id_token).catch(die);
+
+    if ("https://accounts.google.com" === jws.claims.iss) {
+      // TODO make sure we've got the right options for fetch !!!
+      let resp = await window
+        .fetch(baseUrl + "/api/authn/session/oidc/google.com", {
+          method: "POST",
+          headers: {
+            authorization: query.id_token,
+          },
+        })
+        .catch(die);
+      let result = await resp.json().catch(die);
+
+      console.log("Our bespoken token(s):");
+      console.log(result);
+
+      doStuffWithUser(result);
     }
   }
+
+  await init().catch(die);
 })();

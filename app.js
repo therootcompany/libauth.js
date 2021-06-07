@@ -18,7 +18,7 @@ let cookieDefaults = {
   httpOnly: true,
   sameSite: "strict",
   secure: true,
-  expires: 0, // should be set on each issuance
+  //expires: 0, // should be set on each issuance
 };
 
 // JWT Stuff
@@ -209,6 +209,13 @@ app.post(
     return grantTokenAndCookie(user, res);
   }
 );
+app.delete("/api/authn/session", async function (req, res) {
+  let now = Date.now() - 10 * 60 * 1000;
+  let expired = new Date(now);
+  let cookieOpts = Object.assign({}, cookieDefaults, { expires: expired });
+  res.cookie("id_token", "", cookieOpts);
+  res.json({ success: true });
+});
 app.post("/api/authn/refresh", async function (req, res) {
   let user = await verifySession(req);
   return grantToken(user, res);
