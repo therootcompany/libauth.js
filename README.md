@@ -1,14 +1,17 @@
 # NOTE
 
-I made this public because I'm live-streaming the creation of it, not because it's ready for consumption:
+I made this public because I'm live-streaming the creation of it, not because
+it's ready for consumption:
 
-LIVE CODING Recordings: https://www.youtube.com/playlist?list=PLxki0D-ilnqYmidRxvrQoF2jX67wH5OS0
+LIVE CODING Recordings:
+https://www.youtube.com/playlist?list=PLxki0D-ilnqYmidRxvrQoF2jX67wH5OS0
 
 # auth3000
 
 Yet another auth library by AJ
 
-Exchange Long-Lived (24h - 90d) Refresh Token (in Cookie) for Short-Lived (15m - 24h) Session Token.
+Exchange Long-Lived (24h - 90d) Refresh Token (in Cookie) for Short-Lived (15m -
+24h) Session Token.
 
 ## POST /api/authn/session
 
@@ -128,8 +131,31 @@ Response
 }
 ```
 
+## DELETE /api/authn/session
+
+Request
+
+```txt
+DELETE /api/auth/session
+Cookie: xxxxx
+```
+
+Response
+
+```txt
+200 OK
+Set-Cookie: <empty-and-expired-cookie-value>
+```
+
+```json
+{
+  "success": true
+}
+```
+
 # Resources
 
-- [Live Recordings](https://www.youtube.com/playlist?list=PLxki0D-ilnqYmidRxvrQoF2jX67wH5OS0) of the making of this project
+- [Live Recordings](https://www.youtube.com/playlist?list=PLxki0D-ilnqYmidRxvrQoF2jX67wH5OS0)
+  of the making of this project
 - [Express Cookies Cheat Sheet](https://github.com/BeyondCodeBootcamp/beyondcodebootcamp.com/blob/main/articles/express-cookies-cheatsheet.md)
 - [How to add Google Sign In](https://therootcompany.com/blog/google-sign-in-javascript-api/)
