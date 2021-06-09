@@ -53,7 +53,7 @@ my_access_token="$(
         -d '{ "account_id": "Polo" }' |
         jq -r '.access_token'
 )"
-echo "'${my_access_token}'"
+#echo "'${my_access_token}'"
 # TODO add issue for keypairs exiting cleanly on error
 keypairs inspect "${my_access_token}" > /dev/null
 echo ''
@@ -93,6 +93,22 @@ echo 'Use Token: Inspect'
 curl -fsSL http://localhost:"${PORT}"/api/debug/inspect \
     -H "Authorization: Bearer ${my_access_token}"
 echo ''
+
+echo ''
+echo 'Use Token: List Dummies: Expecting Error'
+curl -sSL http://localhost:"${PORT}"/api/dummy \
+    -H "Authorization: Bearer ${my_access_token}"
+echo ''
+
+echo ''
+echo 'Exchange: Expecting new access_token'
+my_access_token="$(
+    curl -fsSL -X POST http://localhost:"${PORT}"/api/authn/exchange \
+        -H "Authorization: Bearer ${my_id_token}" \
+        -H "Content-Type: application/json" \
+        -d '{ "account_id": "Marko" }' |
+        jq -r '.access_token'
+)"
 
 echo ''
 echo 'Use Token: List Dummies'

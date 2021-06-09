@@ -124,7 +124,7 @@ async function getUserByPassword(req) {
   app.use("/", sessionMiddleware);
   // /.well-known/openid-configuration
   // /.well-known/jwks.json
-  app.use("/", sessionMiddleware.oidcConfig);
+  app.use("/", sessionMiddleware.wellKnown);
 
   //
   // API Middleware & Handlers
