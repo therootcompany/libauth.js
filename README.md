@@ -13,6 +13,26 @@ Yet another auth library by AJ
 Exchange Long-Lived (24h - 90d) Refresh Token (in Cookie) for Short-Lived (15m -
 24h) Session Token.
 
+# Usage
+
+```js
+let sessionMiddleware = require("./lib/session.js")({
+  issuers: [issuer],
+  getIdClaims: getUser,
+  getAccessClaims: getUser,
+});
+
+// /api/authn/{session,refresh,exchange}
+app.use("/", sessionMiddleware);
+// /.well-known/openid-configuration
+// /.well-known/jwks.json
+app.use("/", sessionMiddleware.oidcConfig);
+```
+
+```js
+function getUser() {}
+```
+
 ## POST /api/authn/session
 
 Request
