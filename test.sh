@@ -24,7 +24,7 @@ echo 'User Credentials: Expecting cookies and id_token'
 curl -fsSL -X POST http://localhost:"${PORT}"/api/authn/session \
     -b cookies.jar -c cookies.jar \
     -H "Content-Type: application/json" \
-    -d '{ "is_verified": true }'
+    -d '{ "user": "coolaj86@gmail.com" }'
 echo ''
 
 # Should give error
@@ -81,6 +81,18 @@ else
     keypairs inspect "${my_access_token}" > /dev/null
     echo ''
 fi
+
+echo ''
+echo 'Use Token: Inspect'
+curl -sSL http://localhost:"${PORT}"/api/debug/inspect \
+    -H "Authorization: Bearer ${my_access_token}"
+echo ''
+
+echo ''
+echo 'Use Token: List Dummies'
+curl -sSL http://localhost:"${PORT}"/api/dummy \
+    -H "Authorization: Bearer ${my_access_token}"
+echo ''
 
 echo ''
 echo 'PASS'

@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "description": "Another of AJ's Auth libraries",
   "main": "index.js",
-  "files": ["lib"],
+  "files": [
+    "lib"
+  ],
   "scripts": {
     "genenv": "node ./genenv.js",
     "test": "bash ./test.sh"
@@ -20,6 +22,7 @@
   "homepage": "https://github.com/therootcompany/auth3000#readme",
   "dependencies": {
     "@root/async-router": "^1.0.8",
+    "@ryanburnette/authorization": "^3.0.0",
     "body-parser": "^1.19.0",
     "cookie-parser": "^1.4.5",
     "dotenv": "^10.0.0",
