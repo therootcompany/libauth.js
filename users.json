@@ -1,0 +1,17 @@
+{
+  "map": {
+    "coolaj86@gmail.com": "U-abc123",
+    "G-abc123": "U-abc123"
+  },
+  "users": {
+    "U-abc123": {
+      "sub": "U-abc123",
+      "first_name": "AJ",
+      "last_name": "ONeal",
+      "accounts": {
+        "Marko": { "id": "Marko", "roles": ["admin", "user"], "priority": 100 },
+        "Polo": { "id": "Polo", "roles": ["user"], "priority": 500 }
+      }
+    }
+  }
+}
