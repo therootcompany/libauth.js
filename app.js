@@ -97,7 +97,7 @@ async function getUserByPassword(req) {
     verifyJwt({
       iss: issuer,
       // TODO this should NOT be necessary!
-      pub: keypair.public,
+      //pub: keypair.public,
       strict: false,
     })
   );
