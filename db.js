@@ -48,10 +48,12 @@ DB.get = async function (query) {
       );
     }
   } else {
+    // TODO move up a layer?
     account = Object.values(user.accounts).sort(function (a, b) {
       return a.priority - b.priority;
     })[0];
   }
+  // TODO move up a layer?
   if (account) {
     user.roles = account.roles;
     user.account_id = account.id;

@@ -48,7 +48,9 @@ echo ''
 echo 'Exchange: Expecting new access_token'
 my_access_token="$(
     curl -fsSL -X POST http://localhost:"${PORT}"/api/authn/exchange \
-        -H "Authorization: Bearer ${my_id_token}" |
+        -H "Authorization: Bearer ${my_id_token}" \
+        -H "Content-Type: application/json" \
+        -d '{ "account_id": "Polo" }' |
         jq -r '.access_token'
 )"
 echo "'${my_access_token}'"

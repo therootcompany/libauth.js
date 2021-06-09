@@ -8,14 +8,14 @@ async function main() {
   let app = require("@root/async-router").Router();
   let bodyParser = require("body-parser");
   let morgan = require("morgan");
-  let verifyJwt = require("./lib/middleware.js");
   let authorization = require("@ryanburnette/authorization");
 
-  let Keypairs = require("keypairs");
+  let verifyJwt = require("./lib/middleware.js");
   let DB = require("./db.js");
   let issuer = "http://localhost:" + process.env.PORT;
 
   // TODO reduce boilerplate?
+  let Keypairs = require("keypairs");
   let PRIVATE_KEY = process.env.PRIVATE_KEY;
   let keypair = await Keypairs.parse({ key: PRIVATE_KEY }).catch(function (e) {
     // could not be parsed or was a public key
@@ -26,8 +26,8 @@ async function main() {
     return Keypairs.generate();
   });
 
-  // misnomer: returns claims that should go into token
-  async function getUser({ email, iss, ppid, credentials, jws }) {
+  // TODO: signal whether ID Token or Access Token or both should be provided
+  async function getIdClaims({ email, iss, ppid, credentials, jws, claims }) {
     // TODO credentials
     // TODO MFA
     // TODO ppid vs id vs sub?
@@ -48,6 +48,43 @@ async function main() {
     return {
       sub: user.sub,
       first_name: user.first_name,
+      // these are authz things (for an access token), but for the demo...
+      //account_id: user.account_id,
+      //roles: user.roles,
+    };
+  }
+
+  // TODO jws => id_token?
+  async function getAccessClaims({ jws, claims }) {
+    if (!jws) {
+      throw new Error("INVALID_CREDENTIALS");
+    }
+
+    let user = await DB.get({
+      id: jws && jws.claims.sub,
+    });
+    if (!user) {
+      throw new Error("TODO_NOT_FOUND");
+    }
+
+    let account = user.account;
+    if (claims && claims.account_id) {
+      let account = user.accounts[claims.account_id];
+      console.log("claims.account_id", claims.account_id);
+      console.log("user.accounts", user.accounts);
+      user.account_id = undefined;
+      if (!account) {
+        throw new Error("TODO_BAD_ACCESS_REQUEST");
+      }
+      user.account_id = account.id;
+      user.roles = account.roles;
+    }
+
+    return {
+      // authn things, but handy
+      sub: user.sub,
+      first_name: user.first_name,
+      // authz things
       account_id: user.account_id,
       roles: user.roles,
     };
@@ -80,7 +117,8 @@ async function getUserByPassword(req) {
 
   let sessionMiddleware = require("./lib/session.js")({
     iss: issuer,
-    getUser: getUser,
+    getIdClaims: getIdClaims,
+    getAccessClaims: getAccessClaims,
   });
   // /api/authn/{session,refresh,exchange}
   app.use("/", sessionMiddleware);
