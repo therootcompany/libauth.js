@@ -16,7 +16,7 @@ Exchange Long-Lived (24h - 90d) Refresh Token (in Cookie) for Short-Lived (15m -
 # Usage
 
 ```js
-let sessionMiddleware = require("./lib/session.js")({
+let sessionMiddleware = require("auth3000/lib/session.js")({
   issuers: [issuer],
   getIdClaims: getUser,
   getAccessClaims: getUser,
@@ -24,13 +24,40 @@ let sessionMiddleware = require("./lib/session.js")({
 
 // /api/authn/{session,refresh,exchange}
 app.use("/", sessionMiddleware);
+
 // /.well-known/openid-configuration
 // /.well-known/jwks.json
-app.use("/", sessionMiddleware.oidcConfig);
+app.use("/", sessionMiddleware.wellKnown);
 ```
 
 ```js
 function getUser() {}
+```
+
+```bash
+curl https://webinstall.dev/keypairs | bash
+keypairs gen --key key.jwk.json --pub pub.jwk.json
+```
+
+```bash
+#!/bin/bash
+
+PRIVATE_KEY="$(keypairs gen 2>/dev/null)"
+echo "PRIVATE_KEY='${PRIVATE_KEY}'" >> .env
+```
+
+Create a server-to-server pre-shared token
+
+```bash
+# sign a token to be valid for 50 years
+keypairs sign --exp '1577880000s' ./key.jwk.json '{ "sub": "admin" }'
+```
+
+```bash
+#!/bin/bash
+
+SERVER_TOKEN="$(keypairs sign --exp '1577880000s' ./key.jwk.json '{ "iss": "http://localhost:3000", "sub": "admin" }' 2>/dev/null )"
+echo "SERVER_TOKEN=${SERVER_TOKEN}" >> .env
 ```
 
 ## POST /api/authn/session
