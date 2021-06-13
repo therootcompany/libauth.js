@@ -197,6 +197,10 @@ async function getUserByPassword(req) {
     }
 
     res.statusCode = err.status || 500;
+    if (res.statusCode >= 500) {
+      console.error("Unexpected API Error:");
+      console.error(err);
+    }
     res.json({ status: err.status, code: err.code, message: err.message });
   });
   app.use("/api/", function apiNotFoundHandler(req, res) {
