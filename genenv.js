@@ -1,6 +1,13 @@
 "use strict";
 
-require("dotenv").config();
+let args = process.argv.slice(2);
+if (!args.length) {
+  require("dotenv").config();
+} else {
+  args.forEach(function (path) {
+    require("dotenv").config({ path: path });
+  });
+}
 
 let fs = require("fs");
 let envjs = fs.readFileSync("./env.tpl.js", "utf8");
