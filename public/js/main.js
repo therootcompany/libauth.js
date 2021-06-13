@@ -106,13 +106,27 @@
     return await resp.json().catch(die);
   }
 
-  function doStuffWithUser(result) {
+  async function doStuffWithUser(result) {
     if (!result.id_token && !result.access_token) {
       window.alert("No token, something went wrong.");
       return;
     }
     $(".js-logout").hidden = false;
     window.alert("Congrats! You win! (check the console for your token)");
+    let resp = await window
+      .fetch(baseUrl + "/api/dummy", {
+        method: "GET",
+        headers: {
+          Authorization: "Bearer " + (result.id_token || result.access_token),
+        },
+      })
+      .catch(noop);
+    if (!resp) {
+      return;
+    }
+    let dummies = await resp.json().catch(die);
+    console.log("Dummies:");
+    console.log(dummies);
   }
 
   async function init() {
@@ -149,7 +163,7 @@
       console.log(result);
 
       if (result.id_token || result.access_token) {
-        doStuffWithUser(result);
+        await doStuffWithUser(result);
         return;
       }
 
@@ -183,7 +197,7 @@
       console.log("Our bespoken token(s):");
       console.log(result);
 
-      doStuffWithUser(result);
+      await doStuffWithUser(result);
     }
   }
 
