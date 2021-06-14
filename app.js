@@ -1,6 +1,6 @@
 "use strict";
 async function main() {
-  require("dotenv").config();
+  require("dotenv").config({ path: ".env" });
 
   let crypto = require("crypto");
   let http = require("http");
@@ -70,8 +70,6 @@ async function main() {
     let account = user.account;
     if (claims && claims.account_id) {
       let account = user.accounts[claims.account_id];
-      console.log("claims.account_id", claims.account_id);
-      console.log("user.accounts", user.accounts);
       user.account_id = undefined;
       if (!account) {
         throw new Error("TODO_BAD_ACCESS_REQUEST");
@@ -152,12 +150,15 @@ async function getUserByPassword(req) {
     });
   }
 
+  //
+  // Dummies
+  //
   let dummies = {};
   app.post(
     "/api/dummy",
     authorization({ roles: ["admin"] }),
     function (req, res) {
-      let id = crypto.randomBytes(16).toString("hex");
+      let id = crypto.randomBytes(8).toString("hex");
       dummies[id] = Object.assign({}, req.body, { id });
       res.json({
         success: true,
