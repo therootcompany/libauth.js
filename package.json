@@ -3,10 +3,9 @@
   "version": "0.1.0",
   "description": "Another of AJ's Auth libraries",
   "main": "index.js",
-  "files": [
-    "lib"
-  ],
+  "files": ["lib"],
   "scripts": {
+    "start": "node app.js",
     "genenv": "node ./genenv.js",
     "test": "bash ./test.sh"
   },
@@ -30,5 +29,9 @@
     "keyfetch": "^1.2.1",
     "keypairs": "^1.2.14",
     "morgan": "^1.10.0"
+  },
+  "devDependencies": {
+    "@root/request": "^1.7.0",
+    "axios": "^0.21.1"
   }
 }
