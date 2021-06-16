@@ -1,6 +1,7 @@
 "use strict";
 async function main() {
   require("dotenv").config({ path: ".env" });
+  require("dotenv").config({ path: ".env.secret" });
 
   let crypto = require("crypto");
   let http = require("http");
@@ -9,6 +10,7 @@ async function main() {
   let bodyParser = require("body-parser");
   let morgan = require("morgan");
   let authorization = require("@ryanburnette/authorization");
+  let request = require("@root/request");
 
   let verifyJwt = require("./lib/middleware.js");
   let DB = require("./db.js");
@@ -113,7 +115,47 @@ async function getUserByPassword(req) {
     return { message: "Hello, World!" };
   });
 
+  let db = {};
   let sessionMiddleware = require("./lib/session.js")({
+    notify: async function ({ type, value, secret }) {
+      console.log("[DEBUG] [SECURITY] secret:", secret);
+      let preHeader = "";
+      let apiKey = process.env.MAILGUN_PRIVATE_KEY;
+      let domain = process.env.MAILGUN_DOMAIN;
+
+      await request({
+        url: `https://api.mailgun.net/v3/${domain}/messages`,
+        auth: `api:${apiKey}`,
+        form: {
+          from: "mailer@rootprojects.org",
+          "h:Reply-To": "aj@rootprojects.org",
+          to: value,
+          subject: "Verify your email",
+          html: `${preHeader}<p>Here's your verification code: ${secret}</p>`,
+          //text: "What's up?",
+        },
+      }).then(function (resp) {
+        //console.log("resp");
+        //console.log(resp);
+        // TODO fix in blog
+        if (resp.statusCode >= 300) {
+          var err = new Error("failed to send message");
+          err.response = resp;
+          throw err;
+        }
+        return resp;
+      });
+    },
+    store: {
+      set: async function (id, val) {
+        console.log("set", id, val);
+        db[id] = val;
+      },
+      get: async function (id) {
+        console.log("get", id, db[id]);
+        return db[id];
+      },
+    },
     iss: issuer,
     getIdClaims: getIdClaims,
     getAccessClaims: getAccessClaims,
