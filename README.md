@@ -60,99 +60,7 @@ SERVER_TOKEN="$(keypairs sign --exp '1577880000s' ./key.jwk.json '{ "iss": "http
 echo "SERVER_TOKEN=${SERVER_TOKEN}" >> .env
 ```
 
-## POST /api/authn/issue_challenge
-
-Request
-
-```txt
-POST /api/auth/issue_challenge
-```
-
-```json
-{
-  "type": "email",
-  "value": "john.doe@gmail.com"
-}
-```
-
-Response
-
-```txt
-200 OK
-
-```
-
-```json
-{
-  "challenge_token": "xxxx.yyyy.zzzz",
-  "retry_after": "2021-06-01T13:59:59.000Z"
-}
-```
-
-## POST /api/authn/challenge/complete
-
-Request
-
-```txt
-POST /api/auth/challenge/complete
-```
-
-```json
-{
-  "verification_token": "xxxx.yyyy.zzzz"
-}
-```
-
-Response
-
-```txt
-200 OK
-
-```
-
-(either a retry, an `id_token`, or an actual error)
-
-```json
-{
-  "id_token": "xxxx.yyyy.zzzz"
-}
-```
-
-## POST /api/authn/challenge/claim
-
-Request
-
-```txt
-POST /api/auth/challenge/claim
-Authorization: Bearer <challenge_token>
-```
-
-```json
-{
-  "challenge_token": "xxxx.yyyy.zzzz"
-}
-```
-
-Response
-
-```txt
-200 OK
-
-```
-
-(either a retry, an `id_token`, or an actual error)
-
-```json
-{
-  "retry_after": "2021-06-01T13:59:59.000Z"
-}
-```
-
-```json
-{
-  "id_token": "xxxx.yyyy.zzzz"
-}
-```
+# Session API
 
 ## POST /api/authn/session
 
@@ -293,6 +201,104 @@ Set-Cookie: <empty-and-expired-cookie-value>
   "success": true
 }
 ```
+
+# Magic Link API
+
+## POST /api/authn/issue_challenge
+
+Request
+
+```txt
+POST /api/auth/issue_challenge
+```
+
+```json
+{
+  "type": "email",
+  "value": "john.doe@gmail.com"
+}
+```
+
+Response
+
+```txt
+200 OK
+
+```
+
+```json
+{
+  "challenge_token": "xxxx.yyyy.zzzz",
+  "retry_after": "2021-06-01T13:59:59.000Z"
+}
+```
+
+## POST /api/authn/challenge/complete
+
+Request
+
+```txt
+POST /api/auth/challenge/complete
+```
+
+```json
+{
+  "verification_token": "xxxx.yyyy.zzzz"
+}
+```
+
+Response
+
+```txt
+200 OK
+
+```
+
+(either a retry, an `id_token`, or an actual error)
+
+```json
+{
+  "id_token": "xxxx.yyyy.zzzz"
+}
+```
+
+## POST /api/authn/challenge/claim
+
+Request
+
+```txt
+POST /api/auth/challenge/claim
+Authorization: Bearer <challenge_token>
+```
+
+```json
+{
+  "challenge_token": "xxxx.yyyy.zzzz"
+}
+```
+
+Response
+
+```txt
+200 OK
+
+```
+
+(either a retry, an `id_token`, or an actual error)
+
+```json
+{
+  "retry_after": "2021-06-01T13:59:59.000Z"
+}
+```
+
+```json
+{
+  "id_token": "xxxx.yyyy.zzzz"
+}
+```
+
+
 
 # Resources
 
