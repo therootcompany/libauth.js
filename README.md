@@ -194,6 +194,7 @@ Response
 ```txt
 200 OK
 Set-Cookie: <empty-and-expired-cookie-value>
+
 ```
 
 ```json
@@ -204,12 +205,40 @@ Set-Cookie: <empty-and-expired-cookie-value>
 
 # Magic Link API
 
-## POST /api/authn/issue_challenge
+This is complex because there are at least 3 components:
+
+- API for creating & exchanging verification tokens
+- `notify` function for sending verification tokens / links
+- Browser interaction for 3 tabs (login, email, verification) on perhaps 2
+  devices
+
+A possible flow for that:
+
+1. Order Challenge
+   - Login via Email
+   - Reset Password
+   - Failed Login via Password Attempt
+2. Click Link (email) or Enter Code (phone) to Complete Verification
+   - May be opened on the original device, or a different device
+3. Login on verified devices
+   - When verifying in a single browser
+     - Original tab will be in background, it should display "you may close this
+       tab" (and auto-close if possible)
+     - Verification tab should ask "Remember this Device for 30 days?" and
+       continue to login
+   - When verifying between two different browsers
+     - Original tab should present "Remember this Device for 30 days?" and login
+     - Verification tab should ask "Continue to App?" and then "Remember this
+       Device for 30 days?"
+
+## POST /api/authn/challenge/issue
+
+This should call `notify` which should send an email according to a template.
 
 Request
 
 ```txt
-POST /api/auth/issue_challenge
+POST /api/authn/challenge/issue
 ```
 
 ```json
@@ -226,10 +255,11 @@ Response
 
 ```
 
-```json
+```js
 {
-  "challenge_token": "xxxx.yyyy.zzzz",
-  "retry_after": "2021-06-01T13:59:59.000Z"
+  "success": "true",
+  //"retry_after": "2021-06-01T13:59:59.000Z",
+  "challenge_token": "xxxx.yyyy.zzzz"
 }
 ```
 
@@ -262,7 +292,50 @@ Response
 }
 ```
 
-## POST /api/authn/challenge/claim
+## GET /api/authn/challenge
+
+Request
+
+Use either `challenge_token` or `secret`.
+
+```txt
+GET /api/auth/challenge
+    ?challenge_token=xxxx.yyyy.zzzz
+    &secret=xxyyzz
+```
+
+Response
+
+```txt
+200 OK
+
+```
+
+Either `verified_at` will be empty, or it will have a value.
+
+```json
+{
+  "success": true,
+  "status": "pending",
+  "ordered_at": "2021-06-20T13:30:59Z",
+  "ordered_by": "Chrome/x.y.z Windows 10",
+  "verified_at": "",
+  "verified_by": ""
+}
+```
+
+```json
+{
+  "success": true,
+  "status": "valid",
+  "ordered_at": "2021-06-20T13:30:59Z",
+  "ordered_by": "Chrome/x.y.z Windows 10",
+  "verified_at": "2021-06-20T13:31:42Z",
+  "ordered_by": "Safari/x.y iPhone iOS 17"
+}
+```
+
+## POST /api/authn/challenge/exchange
 
 Request
 
@@ -288,17 +361,11 @@ Response
 
 ```json
 {
-  "retry_after": "2021-06-01T13:59:59.000Z"
-}
-```
-
-```json
-{
+  "success": true,
+  "status": "valid",
   "id_token": "xxxx.yyyy.zzzz"
 }
 ```
-
-
 
 # Resources
 
