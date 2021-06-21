@@ -5,14 +5,16 @@ set -u
 source .env
 
 function order() {
-    # 1. Order Verification Challenge 
+    # 1. Order Verification Challenge
     # Order a new email verification challenge
     # (an email will be sent that contains a secret code)
-    local my_challenge_token="$(
+    local my_challenge_token
+    my_challenge_token="$(
         curl -X POST http://localhost:${PORT}/api/authn/challenge/issue \
             -H 'Content-Type: application/json' \
             -d '{ "type": "email", "value": "coolaj86@gmail.com" }' |
             jq -r '.challenge_token'
+        # { "success": true, "challenge_token": "xxxx.yyyy.zzzz" }
     )"
     # This challenge token can be used to check the status of the challenge order
     # (think of it as the receipt / tracking number)
@@ -25,6 +27,11 @@ function order() {
     # (the user did not yet receive the email and click the secret link)
     echo ''
     curl "http://localhost:${PORT}/api/authn/challenge?challenge_token=${my_challenge_token}"
+    # {
+    #   "success": true, "status": "pending",
+    #   "ordered_at": "2021-06-20T13:30:59Z", "ordered_by": "Chrome/x.y.z Windows 10",
+    #   "verified_at": "", "verified_by": ""
+    # }
     echo ''
     echo ''
 }
@@ -38,25 +45,39 @@ function finalize() {
     # (is not expired, has not been used - good for debugging)
     echo ''
     curl "http://localhost:${PORT}/api/authn/challenge?token=${my_secret}"
+    # {
+    #   "success": true, "status": "pending",
+    #   "ordered_at": "2021-06-20T13:30:59Z", "ordered_by": "Chrome/x.y.z Windows 10",
+    #   "verified_at": "", "verified_by": ""
+    # }
     echo ''
     echo ''
 
-    # 4. Get ID Token: Verify Challenge / Finalize Order (with Secret) 
+    # 4. Get ID Token: Verify Challenge / Finalize Order (with Secret)
     # Here we finalize the order with the secret, and get back an id token
     # (the user clicks the link in the email)
     echo ''
     curl -X POST http://localhost:${PORT}/api/authn/challenge/complete \
         -H 'Content-Type: application/json' \
-        -d '{ "token": "'${my_secret}'" }'
+        -d '{ "token": "'"${my_secret}"'" }'
+    # {
+    #   "success": true, "status": "valid",
+    #   "id_token": "xxxx.yyyy.zzzz"
+    # }
     echo ''
     echo ''
 
-    # 5. Check Status of Challenge Order 
+    # 5. Check Status of Challenge Order
     # We check to see that the challenge token (which can only be used after
     # the secret has been provided from the email link) is usable. This is
     # the same thing we did up in step 2.
     echo ''
     curl "http://localhost:${PORT}/api/authn/challenge?challenge_token=${my_challenge_token}"
+    # {
+    #   "success": true, "status": "valid",
+    #   "ordered_at": "2021-06-20T13:30:59Z", "ordered_by": "Chrome/x.y.z Windows 10",
+    #   "verified_at": "2021-06-20T13:31:42Z", "ordered_by": "Safari/x.y iPhone iOS 17"
+    # }
     echo ''
     echo ''
 
@@ -67,7 +88,11 @@ function finalize() {
     echo ''
     curl -X POST http://localhost:${PORT}/api/authn/challenge/exchange \
         -H 'Content-Type: application/json' \
-        -d '{ "challenge_token": "'${my_challenge_token}'" }'
+        -d '{ "challenge_token": "'"${my_challenge_token}"'" }'
+    # {
+    #   "success": true, "status": "valid",
+    #   "id_token": "xxxx.yyyy.zzzz"
+    # }
     echo ''
     echo ''
 }
