@@ -218,6 +218,7 @@ A possible flow for that:
    - Login via Email
    - Reset Password
    - Failed Login via Password Attempt
+   - Email verification (already logged in - such as the first login)
 2. Click Link (email) or Enter Code (phone) to Complete Verification
    - May be opened on the original device, or a different device
 3. Login on verified devices
