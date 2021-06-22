@@ -11,6 +11,7 @@ async function main() {
   let morgan = require("morgan");
   let authorization = require("@ryanburnette/authorization");
   let request = require("@root/request");
+  let rnd = require("./lib/rnd.js");
 
   let verifyJwt = require("./lib/middleware.js");
   let DB = require("./db.js");
@@ -117,42 +118,72 @@ async function getUserByPassword(req) {
 
   let db = {};
   let sessionMiddleware = require("./lib/session.js")({
-    notify: async function ({ type, value, secret }) {
-      console.log("[DEBUG] [SECURITY] secret:", secret);
+    notify: async function ({ type, value, secret, claims, challenge_url }) {
+      if ("DEVELOPMENT" === process.env.ENV) {
+        // TODO do validation, but don't send
+        //console.debug("[DEV] skipping email send");
+        //return;
+      }
+
       let preHeader = "";
       let apiKey = process.env.MAILGUN_PRIVATE_KEY;
       let domain = process.env.MAILGUN_DOMAIN;
 
-      await request({
+      let from = process.env.EMAIL_FROM;
+      let replyTo = process.env.EMAIL_REPLY_TO;
+      let msgDomain = process.env.EMAIL_ID_DOMAIN;
+
+      // TODO use heml + eta for email templates
+      let templates = {
+        "magic-link": {
+          subject: "Verify your email",
+          html: `${preHeader}<p>Here's your verification code: ${secret}\n\n${challenge_url}</p>`,
+          text: `Here's your verification code: ${secret}\n\n${challenge_url}`,
+        },
+        "forgot-password": {
+          subject: "Password Reset Link",
+          html: `${preHeader}<p>Here's password reset code: ${secret}\n\n${challenge_url}</p>`,
+          text: `Here's password reset code: ${secret}\n\n${challenge_url}`,
+        },
+      };
+      let data = templates[claims.template];
+      if (!data) {
+        throw new Error(
+          "Developer Error: invalid `template` value '" +
+            claims.template +
+            "'. If you're just a regular person seeing this, it's not your fault. we did something wrong on our end."
+        );
+      }
+
+      let rndval = rnd();
+      let resp = await request({
         url: `https://api.mailgun.net/v3/${domain}/messages`,
         auth: `api:${apiKey}`,
         form: {
-          from: "mailer@rootprojects.org",
-          "h:Reply-To": "aj@rootprojects.org",
+          from: from,
+          "h:Reply-To": replyTo,
+          "h:Message-ID": `${rndval}@${msgDomain}`,
+          "h:X-Entity-Ref-ID": `${rndval}@${msgDomain}`,
           to: value,
-          subject: "Verify your email",
-          html: `${preHeader}<p>Here's your verification code: ${secret}</p>`,
-          //text: "What's up?",
+          subject: data.subject,
+          html: data.html,
+          text: data.text,
         },
-      }).then(function (resp) {
-        //console.log("resp");
-        //console.log(resp);
-        // TODO fix in blog
-        if (resp.statusCode >= 300) {
-          var err = new Error("failed to send message");
-          err.response = resp;
-          throw err;
-        }
-        return resp;
       });
+
+      if (resp.statusCode >= 300) {
+        var err = new Error("failed to email message");
+        err.response = resp;
+        throw err;
+      }
+
+      return resp;
     },
     store: {
       set: async function (id, val) {
-        console.log("set", id, val);
         db[id] = val;
       },
       get: async function (id) {
-        console.log("get", id, db[id]);
         return db[id];
       },
     },

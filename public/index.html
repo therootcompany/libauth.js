@@ -4,9 +4,40 @@
     <link rel="stylesheet" href="./css/classless.css" />
   </head>
   <body>
-    <a class="js-google-oidc-url" hidden>Google Sign In</a>
-    <button class="js-logout" type="button" hidden>Logout</button>
+    <h3>Social Login</h3>
+    <div>
+      <a class="js-google-oidc-url" hidden>Google Sign In</a>
+      <button class="js-logout" type="button" hidden>Logout</button>
+    </div>
+
+    <hr />
+
+    <form class="js-magic-email" action="#">
+      <h3>Or Login with Email</h3>
+      <label
+        >Email:
+        <input name="email" type="email" required />
+      </label>
+      <label>
+        <button type="submit">Next</button>
+      </label>
+    </form>
+
+    <div class="js-magic-check" hidden>
+      <h3>Go Check Your Email</h3>
+      <div class="js-email">@</div>
+      <p>Go check your email for the login link.</p>
+      <p>👨‍💻 🔓<a class="js-magic-dev-link" hidden target="_blank"></a></p>
+    </div>
+
+    <form class="js-magic-info" action="#" hidden>
+      <div class="js-login-message">:)</div>
+      <button type="submit">Remember Me for 30 Days</button>
+      <a class="js-login-temporary" href="#">Login Temporarily</a>
+    </form>
+
     <script src="./js/env.js"></script>
     <script src="./js/main.js"></script>
+    <script src="./js/magic-link.js"></script>
   </body>
 </html>

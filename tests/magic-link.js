@@ -62,7 +62,7 @@ async function main() {
   // This challenge token can be used to check the status of the challenge order
   // (think of it as the receipt / tracking number)
   let my_challenge_token = order.challenge_token;
-  let my_secret = order.secret;
+  let my_secret = order._development_secret;
   if (!my_challenge_token) {
     throw new Error("didn't get back 'challenge_token'");
   }
