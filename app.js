@@ -1,45 +1,46 @@
 "use strict";
+
 async function main() {
   require("dotenv").config({ path: ".env" });
   require("dotenv").config({ path: ".env.secret" });
 
-  let crypto = require("crypto");
   let http = require("http");
   let express = require("express");
   let app = require("@root/async-router").Router();
-  let bodyParser = require("body-parser");
-  let morgan = require("morgan");
-  let authorization = require("@ryanburnette/authorization");
-  let request = require("@root/request");
-  let rnd = require("./lib/rnd.js");
 
   let verifyJwt = require("./lib/middleware.js");
-  let DB = require("./db.js");
-  let issuer = "http://localhost:" + process.env.PORT;
+  let issuer = process.env.BASE_URL || `http://localhost:${process.env.PORT}`;
 
   // TODO reduce boilerplate?
   let Keypairs = require("keypairs");
-  let PRIVATE_KEY = process.env.PRIVATE_KEY;
-  let keypair = await Keypairs.parse({ key: PRIVATE_KEY }).catch(function (e) {
-    // could not be parsed or was a public key
-    console.warn(
-      "Warn: PRIVATE_KEY could not be parsed! Generating a temporary key."
-    );
-    console.warn(e);
-    return Keypairs.generate();
-  });
+  let keypair = await Keypairs.parse({ key: process.env.PRIVATE_KEY }).catch(
+    function (e) {
+      // could not be parsed or was a public key
+      console.warn(
+        "Warn: PRIVATE_KEY could not be parsed! Generating a temporary key."
+      );
+      console.warn(e);
+      return Keypairs.generate();
+    }
+  );
 
-  // TODO: signal whether ID Token or Access Token or both should be provided
-  async function getIdClaims({ email, iss, ppid, credentials, jws, claims }) {
+  let DB = require("./db.js");
+  async function getClaims(req) {
+    let { strategy, email, iss, ppid, jws } = req.auth;
+
+    if ("exchange" === strategy) {
+      return getAccessClaims(req);
+    }
+
     // TODO credentials
     // TODO MFA
     // TODO ppid vs id vs sub?
     let user = await DB.get({
-      email: email || (credentials && credentials.user),
+      email: email || (req.body && req.body.user),
       ppid: ppid,
       id: jws && jws.claims.sub,
     });
-    if (credentials) {
+    if (req.body && req.body.password) {
       if ("DEVELOPMENT" !== process.env.ENV) {
         throw new Error("creds not implemented");
       }
@@ -49,16 +50,17 @@ async function main() {
     }
 
     return {
-      sub: user.sub,
-      first_name: user.first_name,
-      // these are authz things (for an access token), but for the demo...
-      //account_id: user.account_id,
-      //roles: user.roles,
+      claims: {
+        sub: user.sub,
+        first_name: user.first_name,
+        // these are authz things (for an access token), but for the demo...
+        //account_id: user.account_id,
+        //roles: user.roles,
+      },
     };
   }
-
-  // TODO jws => id_token?
-  async function getAccessClaims({ jws, claims }) {
+  async function getAccessClaims(req) {
+    let { jws } = req.auth;
     if (!jws) {
       throw new Error("INVALID_CREDENTIALS");
     }
@@ -71,8 +73,8 @@ async function main() {
     }
 
     let account = user.account;
-    if (claims && claims.account_id) {
-      let account = user.accounts[claims.account_id];
+    if (req.body && req.body.account_id) {
+      let account = user.accounts[req.body.account_id];
       user.account_id = undefined;
       if (!account) {
         throw new Error("TODO_BAD_ACCESS_REQUEST");
@@ -82,12 +84,14 @@ async function main() {
     }
 
     return {
-      // authn things, but handy
-      sub: user.sub,
-      first_name: user.first_name,
-      // authz things
-      account_id: user.account_id,
-      roles: user.roles,
+      claims: {
+        // authn things, but handy
+        sub: user.sub,
+        first_name: user.first_name,
+        // authz things
+        account_id: user.account_id,
+        roles: user.roles,
+      },
     };
   }
 
@@ -106,93 +110,107 @@ async function getUserByPassword(req) {
 }
 */
 
+  async function notify(req) {
+    let { type, value, secret, id } = req.auth;
+    let request = require("@root/request");
+    let rnd = require("./lib/rnd.js");
+
+    if (!process.env.SEND_EMAIL && "DEVELOPMENT" === process.env.ENV) {
+      console.debug("[DEV] skipping email send");
+      return;
+    }
+
+    let preHeader = "";
+    let apiKey = process.env.MAILGUN_PRIVATE_KEY;
+    let domain = process.env.MAILGUN_DOMAIN;
+
+    let from = process.env.EMAIL_FROM;
+    let replyTo = process.env.EMAIL_REPLY_TO;
+    let msgDomain = process.env.EMAIL_ID_DOMAIN;
+
+    // TODO use heml + eta for email templates
+    let challenge_url = `${issuer}/#login?id=${id}&token=${secret}`;
+    let templates = {
+      "magic-link": {
+        subject: "Verify your email",
+        html: `${preHeader}<p>Here's your verification code: ${secret}\n\n<br><br>${challenge_url}</p>`,
+        text: `Here's your verification code: ${secret}\n\n${challenge_url}`,
+      },
+      "forgot-password": {
+        subject: "Password Reset Link",
+        html: `${preHeader}<p>Here's password reset code: ${secret}\n\n${challenge_url}</p>`,
+        text: `Here's password reset code: ${secret}\n\n${challenge_url}`,
+      },
+    };
+    let data = templates[req.body.template];
+    if (!data) {
+      throw new Error(
+        "Developer Error: invalid `template` value '" +
+          req.body.template +
+          "'. If you're just a regular person seeing this, it's not your fault. we did something wrong on our end."
+      );
+    }
+
+    let rndval = rnd();
+    let resp = await request({
+      url: `https://api.mailgun.net/v3/${domain}/messages`,
+      auth: `api:${apiKey}`,
+      form: {
+        from: from,
+        "h:Reply-To": replyTo,
+        "h:Message-ID": `${rndval}@${msgDomain}`,
+        "h:X-Entity-Ref-ID": `${rndval}@${msgDomain}`,
+        to: value,
+        subject: data.subject,
+        html: data.html,
+        text: data.text,
+      },
+    });
+
+    if (resp.statusCode >= 300) {
+      var err = new Error("failed to email message");
+      err.response = resp;
+      throw err;
+    }
+
+    return resp;
+  }
+
+  let store = {
+    _db: {},
+    set: async function (id, val) {
+      store._db[id] = val;
+    },
+    get: async function (id) {
+      return store._db[id];
+    },
+  };
+
+  let sessionMiddleware = require("./lib/session.js")(
+    issuer,
+    process.env.HMAC_SECRET || process.env.COOKIE_SECRET,
+    {
+      keypair,
+      notify: notify,
+      store: store,
+      getClaims,
+      googleClientId: process.env.GOOGLE_CLIENT_ID,
+    }
+  );
+
+  function greet(req, res) {
+    return { message: "Hello, World!" };
+  }
+
   // Dev / Localhost Stuff
   if ("DEVELOPMENT" === process.env.ENV) {
     // more logging
+    let morgan = require("morgan");
     app.use("/", morgan("tiny"));
   }
-
-  app.get("/hello", function (req, res) {
-    return { message: "Hello, World!" };
-  });
-
-  let db = {};
-  let sessionMiddleware = require("./lib/session.js")({
-    notify: async function ({ type, value, secret, claims, challenge_url }) {
-      if ("DEVELOPMENT" === process.env.ENV) {
-        // TODO do validation, but don't send
-        //console.debug("[DEV] skipping email send");
-        //return;
-      }
-
-      let preHeader = "";
-      let apiKey = process.env.MAILGUN_PRIVATE_KEY;
-      let domain = process.env.MAILGUN_DOMAIN;
-
-      let from = process.env.EMAIL_FROM;
-      let replyTo = process.env.EMAIL_REPLY_TO;
-      let msgDomain = process.env.EMAIL_ID_DOMAIN;
-
-      // TODO use heml + eta for email templates
-      let templates = {
-        "magic-link": {
-          subject: "Verify your email",
-          html: `${preHeader}<p>Here's your verification code: ${secret}\n\n${challenge_url}</p>`,
-          text: `Here's your verification code: ${secret}\n\n${challenge_url}`,
-        },
-        "forgot-password": {
-          subject: "Password Reset Link",
-          html: `${preHeader}<p>Here's password reset code: ${secret}\n\n${challenge_url}</p>`,
-          text: `Here's password reset code: ${secret}\n\n${challenge_url}`,
-        },
-      };
-      let data = templates[claims.template];
-      if (!data) {
-        throw new Error(
-          "Developer Error: invalid `template` value '" +
-            claims.template +
-            "'. If you're just a regular person seeing this, it's not your fault. we did something wrong on our end."
-        );
-      }
-
-      let rndval = rnd();
-      let resp = await request({
-        url: `https://api.mailgun.net/v3/${domain}/messages`,
-        auth: `api:${apiKey}`,
-        form: {
-          from: from,
-          "h:Reply-To": replyTo,
-          "h:Message-ID": `${rndval}@${msgDomain}`,
-          "h:X-Entity-Ref-ID": `${rndval}@${msgDomain}`,
-          to: value,
-          subject: data.subject,
-          html: data.html,
-          text: data.text,
-        },
-      });
-
-      if (resp.statusCode >= 300) {
-        var err = new Error("failed to email message");
-        err.response = resp;
-        throw err;
-      }
-
-      return resp;
-    },
-    store: {
-      set: async function (id, val) {
-        db[id] = val;
-      },
-      get: async function (id) {
-        return db[id];
-      },
-    },
-    iss: issuer,
-    getIdClaims: getIdClaims,
-    getAccessClaims: getAccessClaims,
-  });
+  app.get("/hello", greet);
   // /api/authn/{session,refresh,exchange}
-  app.use("/", sessionMiddleware);
+  app.use("/api/authn", sessionMiddleware);
   // /.well-known/openid-configuration
   // /.well-known/jwks.json
   app.use("/", sessionMiddleware.wellKnown);
@@ -200,13 +218,12 @@ async function getUserByPassword(req) {
   //
   // API Middleware & Handlers
   //
+  let bodyParser = require("body-parser");
   app.use("/api", bodyParser.json({ limit: "100kb" }));
   app.use(
     "/api",
     verifyJwt({
       iss: issuer,
-      // TODO this should NOT be necessary!
-      //pub: keypair.public,
       strict: false,
     })
   );
@@ -216,7 +233,6 @@ async function getUserByPassword(req) {
     }
     next();
   });
-
   if ("DEVELOPMENT" === process.env.ENV) {
     app.use("/api/debug/inspect", function (req, res) {
       res.json({ success: true, user: req.user || null });
@@ -226,6 +242,8 @@ async function getUserByPassword(req) {
   //
   // Dummies
   //
+  let crypto = require("crypto");
+  let authorization = require("@ryanburnette/authorization");
   let dummies = {};
   app.post(
     "/api/dummy",
