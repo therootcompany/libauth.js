@@ -17,7 +17,7 @@ function getResponse(resp) {
       "unexpected error status code on response:" +
         resp.status +
         ": " +
-        JSON.stringify(resp.body || null)
+        JSON.stringify(resp.body || null, null, 2)
     );
     err.response = resp;
     throw err;
@@ -35,7 +35,7 @@ function expect4xx(resp) {
       "unexpected success status code on response:" +
         resp.status +
         ": " +
-        JSON.stringify(resp.body || null)
+        JSON.stringify(resp.body || null, null, 2)
     );
     err.response = resp;
     throw err;
@@ -57,14 +57,18 @@ async function main() {
     url: `${baseUrl}/challenge/issue`,
     method: "POST",
     headers: { "User-Agent": ua1 },
-    json: { type: "email", value: `${TEST_EMAIL}` },
+    json: { type: "email", value: `${TEST_EMAIL}`, template: "magic-link" },
   }).then(getBody);
   // This challenge token can be used to check the status of the challenge order
   // (think of it as the receipt / tracking number)
-  let my_challenge_token = order.challenge_token;
+  let my_challenge = order.id;
+  let my_receipt = order.receipt;
   let my_secret = order._development_secret;
-  if (!my_challenge_token) {
-    throw new Error("didn't get back 'challenge_token'");
+  if (!my_challenge) {
+    throw new Error("didn't get back 'id'");
+  }
+  if (!my_receipt) {
+    throw new Error("didn't get back 'receipt'");
   }
   if (!my_secret) {
     throw new Error(
@@ -80,10 +84,11 @@ async function main() {
   // We can check the challenge order and see that it is not yet fulfilled
   // (the user did not yet receive the email and click the secret link)
   let status1 = await request({
-    url: `${baseUrl}/challenge?challenge_token=${my_challenge_token}`,
+    url: `${baseUrl}/challenge?id=${my_challenge}&receipt=${my_receipt}`,
     headers: { "User-Agent": ua1 },
     json: true,
   }).then(getBody);
+
   if (status1.ordered_by != ua1) {
     throw new Error(
       `status1: 'ordered_by' should be '${ua1}', not '${status1.ordered_by}'`
@@ -92,7 +97,7 @@ async function main() {
   /*
   if ("pending" != status1.status) {
     throw new Error(
-      "status1: 'status' is not set to 'pending':" + JSON.stringify(status1)
+      "status1: 'status' is not set to 'pending':" + JSON.stringify(status1, null, 2)
     );
   }
   */
@@ -101,31 +106,33 @@ async function main() {
       "status1: 'verified_by' must not be set yet:" + status1.verified_by
     );
   }
-  console.info(`\t${PASS}: Challenge Status w/ challenge_token`);
+  console.info(`\t${PASS}: Challenge Status w/ receipt`);
 
   // 3. Check (Secret) Status of Challenge Order
   // Here we are checking to see that the secret is still valid
   // (is not expired, has not been used - good for debugging)
   let status2 = await request({
-    url: `${baseUrl}/challenge?token=${my_secret}`,
+    url: `${baseUrl}/challenge?id=${my_challenge}&token=${my_secret}`,
     headers: { "User-Agent": ua1 },
     json: true,
   }).then(getBody);
   if (status2.ordered_by != ua1) {
     throw new Error(
-      "status2: 'ordered_by' not set correctly:" + JSON.stringify(status2)
+      "status2: 'ordered_by' not set correctly:" +
+        JSON.stringify(status2, null, 2)
     );
   }
   /*
   if ("pending" != status2.status) {
     throw new Error(
-      "status2: 'status' is not set to 'pending':" + JSON.stringify(status2)
+      "status2: 'status' is not set to 'pending':" + JSON.stringify(status2, null, 2)
     );
   }
   */
   if (status2.verified_by || status2.verified_at) {
     throw new Error(
-      "status2: 'verified_by' must not be set yet:" + JSON.stringify(status2)
+      "status2: 'verified_by' must not be set yet:" +
+        JSON.stringify(status2, null, 2)
     );
   }
   console.info(`\t${PASS}: Challenge Status w/ secret`);
@@ -133,11 +140,19 @@ async function main() {
   // 2+3b: Invalid Status Requests
   // Make sure bad values are handled correctly.
   await request({
-    url: `${baseUrl}/challenge?challenge_token=doesntexist`,
+    url: `${baseUrl}/challenge?id=${my_challenge}&receipt=doesntexist`,
     json: true,
   }).then(expect4xx);
   await request({
-    url: `${baseUrl}/challenge?token=doesntexist`,
+    url: `${baseUrl}/challenge?id=${my_challenge}&token=doesntexist`,
+    json: true,
+  }).then(expect4xx);
+  await request({
+    url: `${baseUrl}/challenge?id=doesntexist&receipt=${my_receipt}`,
+    json: true,
+  }).then(expect4xx);
+  await request({
+    url: `${baseUrl}/challenge?id=doesntexist&token=${my_secret}`,
     json: true,
   }).then(expect4xx);
   await request({
@@ -153,13 +168,13 @@ async function main() {
     url: `${baseUrl}/challenge/complete`,
     method: "POST",
     headers: { "User-Agent": ua2 },
-    json: { wrong_token: my_secret },
+    json: { id: my_challenge, wrong_token: my_secret },
   }).then(expect4xx);
   await request({
     url: `${baseUrl}/challenge/complete`,
     method: "POST",
     headers: { "User-Agent": ua2 },
-    json: { token: "wrong_" + my_secret },
+    json: { id: my_challenge, token: "wrong_" + my_secret },
   }).then(expect4xx);
   console.info(`\t${PASS}: Complete Challenge Incorrectly`);
 
@@ -167,25 +182,24 @@ async function main() {
     url: `${baseUrl}/challenge/complete`,
     method: "POST",
     headers: { "User-Agent": ua2 },
-    json: { token: my_secret },
+    json: { id: my_challenge, token: my_secret },
   }).then(getResponse);
   /*
   if ("valid" != finalize.body.status) {
     throw new Error(
-      "finalize: 'status' is not set to 'valid':" + JSON.stringify(finalize)
+      "finalize: 'status' is not set to 'valid':" + JSON.stringify(finalize, null, 2)
     );
   }
   */
   if (!finalize.body.id_token) {
-    console.log("[DEBUG] finalize:", finalize);
     throw new Error(
-      "finalize: 'id_token' is not set:" + JSON.stringify(finalize)
+      "finalize: 'id_token' is not set:" + JSON.stringify(finalize, null, 2)
     );
   }
   if (!finalize.headers["set-cookie"]) {
     throw new Error(
       "finalize: 'set-cookie' was not found among the headers:" +
-        JSON.stringify(finalize)
+        JSON.stringify(finalize, null, 2)
     );
   }
   console.info(`\t${PASS}: Complete Challenge`);
@@ -194,7 +208,7 @@ async function main() {
     url: `${baseUrl}/challenge/complete`,
     method: "POST",
     headers: { "User-Agent": ua2 },
-    json: { token: my_secret },
+    json: { id: my_challenge, token: my_secret },
   }).then(expect4xx);
   console.info(`\t${PASS}: Complete Challenge Replay`);
 
@@ -203,7 +217,7 @@ async function main() {
   // the secret has been provided from the email link) is usable. This is
   // the same thing we did up in step 2.
   let status3 = await request({
-    url: `${baseUrl}/challenge?challenge_token=${my_challenge_token}`,
+    url: `${baseUrl}/challenge?receipt=${my_receipt}`,
     headers: { "User-Agent": ua1 },
     json: true,
   }).then(getBody);
@@ -219,23 +233,24 @@ async function main() {
   */
   if (status3.ordered_by != ua1) {
     throw new Error(
-      "status3: 'ordered_by' not set correctly:" + JSON.stringify(status3)
+      "status3: 'ordered_by' not set correctly:" +
+        JSON.stringify(status3, null, 2)
     );
   }
   /*
   if ("valid" != status3.status) {
     throw new Error(
-      "status3: 'status' is not set to 'valid':" + JSON.stringify(status3)
+      "status3: 'status' is not set to 'valid':" + JSON.stringify(status3, null, 2)
     );
   }
   */
   if (status3.verified_by != ua2) {
     throw new Error(
       `status3: 'verified_by' should be set to '${ua2}':` +
-        JSON.stringify(status3)
+        JSON.stringify(status3, null, 2)
     );
   }
-  console.info(`\t${PASS}: Valid Challenge Status w/ challenge_token`);
+  console.info(`\t${PASS}: Valid Challenge Status w/ receipt`);
 
   // TODO what about secret? that's invalid now, right?
 
@@ -247,47 +262,45 @@ async function main() {
     url: `${baseUrl}/challenge/exchange`,
     method: "POST",
     headers: { "User-Agent": ua1 },
-    json: { wrong_challenge_token: my_challenge_token },
+    json: { wrong_receipt: my_receipt },
   }).then(expect4xx);
   await request({
     url: `${baseUrl}/challenge/exchange`,
     method: "POST",
     headers: { "User-Agent": ua1 },
-    json: { challenge_token: "x" + my_challenge_token },
+    json: { receipt: "x" + my_receipt },
   }).then(expect4xx);
   await request({
     url: `${baseUrl}/challenge/exchange`,
     method: "POST",
     headers: { "User-Agent": ua1 },
-    json: { challenge_token: my_challenge_token + "x" },
+    json: { receipt: my_receipt + "x" },
   }).then(expect4xx);
   // TODO check wrong user agent
-  console.info(
-    `\t${PASS}: Verified Challenge Exchange w/ invalid challenge_token`
-  );
+  console.info(`\t${PASS}: Verified Challenge Exchange w/ invalid receipt`);
 
   let exchange = await request({
     url: `${baseUrl}/challenge/exchange`,
     method: "POST",
     headers: { "User-Agent": ua1 },
-    json: { challenge_token: my_challenge_token },
+    json: { receipt: my_receipt },
   }).then(getResponse);
   /*
   if ("valid" != exchange.body.status) {
     throw new Error(
-      "exchange: 'status' is not set to 'valid':" + JSON.stringify(exchange)
+      "exchange: 'status' is not set to 'valid':" + JSON.stringify(exchange, null, 2)
     );
   }
   */
   if (!exchange.body.id_token) {
     throw new Error(
-      "exchange: 'id_token' is not set:" + JSON.stringify(exchange)
+      "exchange: 'id_token' is not set:" + JSON.stringify(exchange, null, 2)
     );
   }
   if (!exchange.headers["set-cookie"]) {
     throw new Error(
       "exchange: 'set-cookie' was not found among the headers:" +
-        JSON.stringify(exchange)
+        JSON.stringify(exchange, null, 2)
     );
   }
   /*
@@ -296,18 +309,16 @@ async function main() {
       "id_token": "xxxx.yyyy.zzzz"
     }
   */
-  console.info(`\t${PASS}: Verified Challenge Exchange w/ challenge_token`);
+  console.info(`\t${PASS}: Verified Challenge Exchange w/ receipt`);
 
   await request({
     url: `${baseUrl}/challenge/exchange`,
     method: "POST",
     headers: { "User-Agent": ua1 },
-    json: { challenge_token: my_challenge_token },
+    json: { id: my_challenge, receipt: my_receipt },
   }).then(expect4xx);
   console.info(
-    `\t${colors.green(
-      "PASS"
-    )}: Spent Challenge Exchange w/ spent challenge_token`
+    `\t${colors.green("PASS")}: Spent Challenge Exchange w/ spent receipt`
   );
 }
 

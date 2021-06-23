@@ -29,17 +29,22 @@ async function main() {
     return Keypairs.generate();
   });
 
-  // TODO: signal whether ID Token or Access Token or both should be provided
-  async function getIdClaims({ email, iss, ppid, credentials, jws, claims }) {
+  async function getClaims(request) {
+    if ("exchange" === request.method2) {
+      return getAccessClaims(request);
+    }
+
+    let { email, iss, ppid, jws, claims2 } = request;
+
     // TODO credentials
     // TODO MFA
     // TODO ppid vs id vs sub?
     let user = await DB.get({
-      email: email || (credentials && credentials.user),
+      email: email || (claims2 && claims2.user),
       ppid: ppid,
       id: jws && jws.claims.sub,
     });
-    if (credentials) {
+    if (claims2 && claims2.password) {
       if ("DEVELOPMENT" !== process.env.ENV) {
         throw new Error("creds not implemented");
       }
@@ -49,15 +54,16 @@ async function main() {
     }
 
     return {
-      sub: user.sub,
-      first_name: user.first_name,
-      // these are authz things (for an access token), but for the demo...
-      //account_id: user.account_id,
-      //roles: user.roles,
+      claims: {
+        sub: user.sub,
+        first_name: user.first_name,
+        // these are authz things (for an access token), but for the demo...
+        //account_id: user.account_id,
+        //roles: user.roles,
+      },
     };
   }
 
-  // TODO jws => id_token?
   async function getAccessClaims({ jws, claims }) {
     if (!jws) {
       throw new Error("INVALID_CREDENTIALS");
@@ -82,12 +88,14 @@ async function main() {
     }
 
     return {
-      // authn things, but handy
-      sub: user.sub,
-      first_name: user.first_name,
-      // authz things
-      account_id: user.account_id,
-      roles: user.roles,
+      claims: {
+        // authn things, but handy
+        sub: user.sub,
+        first_name: user.first_name,
+        // authz things
+        account_id: user.account_id,
+        roles: user.roles,
+      },
     };
   }
 
@@ -117,80 +125,84 @@ async function getUserByPassword(req) {
   });
 
   let db = {};
-  let sessionMiddleware = require("./lib/session.js")({
-    notify: async function ({ type, value, secret, claims, challenge_url }) {
-      if ("DEVELOPMENT" === process.env.ENV) {
-        // TODO do validation, but don't send
-        //console.debug("[DEV] skipping email send");
-        //return;
-      }
+  let sessionMiddleware = require("./lib/session.js")(
+    process.env.HMAC_SECRET || process.env.COOKIE_SECRET,
+    {
+      notify: async function ({ type, value, secret, id, claims2 }) {
+        if ("DEVELOPMENT" === process.env.ENV) {
+          // TODO do validation, but don't send
+          //console.debug("[DEV] skipping email send");
+          //return;
+        }
 
-      let preHeader = "";
-      let apiKey = process.env.MAILGUN_PRIVATE_KEY;
-      let domain = process.env.MAILGUN_DOMAIN;
+        let preHeader = "";
+        let apiKey = process.env.MAILGUN_PRIVATE_KEY;
+        let domain = process.env.MAILGUN_DOMAIN;
 
-      let from = process.env.EMAIL_FROM;
-      let replyTo = process.env.EMAIL_REPLY_TO;
-      let msgDomain = process.env.EMAIL_ID_DOMAIN;
+        let from = process.env.EMAIL_FROM;
+        let replyTo = process.env.EMAIL_REPLY_TO;
+        let msgDomain = process.env.EMAIL_ID_DOMAIN;
 
-      // TODO use heml + eta for email templates
-      let templates = {
-        "magic-link": {
-          subject: "Verify your email",
-          html: `${preHeader}<p>Here's your verification code: ${secret}\n\n${challenge_url}</p>`,
-          text: `Here's your verification code: ${secret}\n\n${challenge_url}`,
-        },
-        "forgot-password": {
-          subject: "Password Reset Link",
-          html: `${preHeader}<p>Here's password reset code: ${secret}\n\n${challenge_url}</p>`,
-          text: `Here's password reset code: ${secret}\n\n${challenge_url}`,
-        },
-      };
-      let data = templates[claims.template];
-      if (!data) {
-        throw new Error(
-          "Developer Error: invalid `template` value '" +
-            claims.template +
-            "'. If you're just a regular person seeing this, it's not your fault. we did something wrong on our end."
-        );
-      }
+        // TODO use heml + eta for email templates
+        let challenge_url = `${issuer}/#login?id=${id}&token=${secret}`;
+        let templates = {
+          "magic-link": {
+            subject: "Verify your email",
+            html: `${preHeader}<p>Here's your verification code: ${secret}\n\n<br><br>${challenge_url}</p>`,
+            text: `Here's your verification code: ${secret}\n\n${challenge_url}`,
+          },
+          "forgot-password": {
+            subject: "Password Reset Link",
+            html: `${preHeader}<p>Here's password reset code: ${secret}\n\n${challenge_url}</p>`,
+            text: `Here's password reset code: ${secret}\n\n${challenge_url}`,
+          },
+        };
+        let data = templates[claims2.template];
+        if (!data) {
+          throw new Error(
+            "Developer Error: invalid `template` value '" +
+              claims2.template +
+              "'. If you're just a regular person seeing this, it's not your fault. we did something wrong on our end."
+          );
+        }
 
-      let rndval = rnd();
-      let resp = await request({
-        url: `https://api.mailgun.net/v3/${domain}/messages`,
-        auth: `api:${apiKey}`,
-        form: {
-          from: from,
-          "h:Reply-To": replyTo,
-          "h:Message-ID": `${rndval}@${msgDomain}`,
-          "h:X-Entity-Ref-ID": `${rndval}@${msgDomain}`,
-          to: value,
-          subject: data.subject,
-          html: data.html,
-          text: data.text,
-        },
-      });
+        let rndval = rnd();
+        let resp = await request({
+          url: `https://api.mailgun.net/v3/${domain}/messages`,
+          auth: `api:${apiKey}`,
+          form: {
+            from: from,
+            "h:Reply-To": replyTo,
+            "h:Message-ID": `${rndval}@${msgDomain}`,
+            "h:X-Entity-Ref-ID": `${rndval}@${msgDomain}`,
+            to: value,
+            subject: data.subject,
+            html: data.html,
+            text: data.text,
+          },
+        });
 
-      if (resp.statusCode >= 300) {
-        var err = new Error("failed to email message");
-        err.response = resp;
-        throw err;
-      }
+        if (resp.statusCode >= 300) {
+          var err = new Error("failed to email message");
+          err.response = resp;
+          throw err;
+        }
 
-      return resp;
-    },
-    store: {
-      set: async function (id, val) {
-        db[id] = val;
+        return resp;
       },
-      get: async function (id) {
-        return db[id];
+      store: {
+        set: async function (id, val) {
+          db[id] = val;
+        },
+        get: async function (id) {
+          return db[id];
+        },
       },
-    },
-    iss: issuer,
-    getIdClaims: getIdClaims,
-    getAccessClaims: getAccessClaims,
-  });
+      iss: issuer,
+      getClaims,
+      googleClientId: process.env.GOOGLE_CLIENT_ID,
+    }
+  );
   // /api/authn/{session,refresh,exchange}
   app.use("/", sessionMiddleware);
   // /.well-known/openid-configuration
@@ -205,8 +217,6 @@ async function getUserByPassword(req) {
     "/api",
     verifyJwt({
       iss: issuer,
-      // TODO this should NOT be necessary!
-      //pub: keypair.public,
       strict: false,
     })
   );
