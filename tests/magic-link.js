@@ -54,7 +54,7 @@ async function main() {
   // Order a new email verification challenge
   // (an email will be sent that contains a secret code)
   let order = await request({
-    url: `${baseUrl}/challenge/issue`,
+    url: `${baseUrl}/challenge/order`,
     method: "POST",
     headers: { "User-Agent": ua1 },
     json: { type: "email", value: `${TEST_EMAIL}`, template: "magic-link" },
@@ -165,13 +165,13 @@ async function main() {
   // Here we finalize the order with the secret, and get back an id token
   // (the user clicks the link in the email)
   await request({
-    url: `${baseUrl}/challenge/complete`,
+    url: `${baseUrl}/challenge/finalize`,
     method: "POST",
     headers: { "User-Agent": ua2 },
     json: { id: my_challenge, wrong_token: my_secret },
   }).then(expect4xx);
   await request({
-    url: `${baseUrl}/challenge/complete`,
+    url: `${baseUrl}/challenge/finalize`,
     method: "POST",
     headers: { "User-Agent": ua2 },
     json: { id: my_challenge, token: "wrong_" + my_secret },
@@ -179,7 +179,7 @@ async function main() {
   console.info(`\t${PASS}: Complete Challenge Incorrectly`);
 
   let finalize = await request({
-    url: `${baseUrl}/challenge/complete`,
+    url: `${baseUrl}/challenge/finalize`,
     method: "POST",
     headers: { "User-Agent": ua2 },
     json: { id: my_challenge, token: my_secret },
@@ -205,7 +205,7 @@ async function main() {
   console.info(`\t${PASS}: Complete Challenge`);
 
   await request({
-    url: `${baseUrl}/challenge/complete`,
+    url: `${baseUrl}/challenge/finalize`,
     method: "POST",
     headers: { "User-Agent": ua2 },
     json: { id: my_challenge, token: my_secret },

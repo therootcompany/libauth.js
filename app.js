@@ -26,7 +26,7 @@ async function main() {
 
   let DB = require("./db.js");
   async function getClaims(req) {
-    let { strategy, email, iss, ppid, jws } = req.auth;
+    let { strategy, email, iss, ppid, jws } = req.authn;
 
     if ("exchange" === strategy) {
       return getAccessClaims(req);
@@ -60,7 +60,7 @@ async function main() {
     };
   }
   async function getAccessClaims(req) {
-    let { jws } = req.auth;
+    let { jws } = req.authn;
     if (!jws) {
       throw new Error("INVALID_CREDENTIALS");
     }
@@ -111,7 +111,7 @@ async function getUserByPassword(req) {
 */
 
   async function notify(req) {
-    let { type, value, secret, id } = req.auth;
+    let { type, value, secret, id } = req.authn;
     let request = require("@root/request");
     let rnd = require("./lib/rnd.js");
 
@@ -220,13 +220,7 @@ async function getUserByPassword(req) {
   //
   let bodyParser = require("body-parser");
   app.use("/api", bodyParser.json({ limit: "100kb" }));
-  app.use(
-    "/api",
-    verifyJwt({
-      iss: issuer,
-      strict: false,
-    })
-  );
+  app.use("/api", verifyJwt({ iss: issuer, optional: true }));
   app.use("/api", function (req, res, next) {
     if (req.jws) {
       req.user = req.jws.claims;
