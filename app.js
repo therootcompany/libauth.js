@@ -28,8 +28,11 @@ async function main() {
   async function getClaims(req) {
     let { strategy, email, iss, ppid, jws } = req.authn;
 
-    if ("exchange" === strategy) {
-      return getAccessClaims(req);
+    switch (strategy) {
+      case "exchange":
+        return getAccessClaims(req);
+      default:
+      // continue
     }
 
     // TODO credentials
