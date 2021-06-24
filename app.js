@@ -8,33 +8,23 @@ async function main() {
   let express = require("express");
   let app = require("@root/async-router").Router();
 
-  let verifyJwt = require("./lib/middleware.js");
+  let authenticate = require("./middleware/");
   let issuer = process.env.BASE_URL || `http://localhost:${process.env.PORT}`;
-
-  // TODO reduce boilerplate?
-  let Keypairs = require("keypairs");
-  let keypair = await Keypairs.parse({ key: process.env.PRIVATE_KEY }).catch(
-    function (e) {
-      // could not be parsed or was a public key
-      console.warn(
-        "Warn: PRIVATE_KEY could not be parsed! Generating a temporary key."
-      );
-      console.warn(e);
-      return Keypairs.generate();
-    }
-  );
 
   let DB = require("./db.js");
   async function getClaims(req) {
-    let { strategy, email, iss, ppid, jws } = req.auth;
+    let { strategy, email, iss, ppid, jws } = req.authn;
 
-    if ("exchange" === strategy) {
-      return getAccessClaims(req);
+    // TODO document strategies
+    console.log("strategy:", strategy);
+    switch (strategy) {
+      case "exchange":
+        return getAccessClaims(req);
+      default:
+      // continue
     }
 
-    // TODO credentials
     // TODO MFA
-    // TODO ppid vs id vs sub?
     let user = await DB.get({
       email: email || (req.body && req.body.user),
       ppid: ppid,
@@ -60,7 +50,7 @@ async function main() {
     };
   }
   async function getAccessClaims(req) {
-    let { jws } = req.auth;
+    let { jws } = req.authn;
     if (!jws) {
       throw new Error("INVALID_CREDENTIALS");
     }
@@ -84,11 +74,16 @@ async function main() {
     }
 
     return {
+      // generic authn, token-related things
       claims: {
-        // authn things, but handy
         sub: user.sub,
+      },
+      // authn-only things
+      id_claims: {
         first_name: user.first_name,
-        // authz things
+      },
+      // authz things
+      access_claims: {
         account_id: user.account_id,
         roles: user.roles,
       },
@@ -111,7 +106,7 @@ async function getUserByPassword(req) {
 */
 
   async function notify(req) {
-    let { type, value, secret, id } = req.auth;
+    let { type, value, secret, id } = req.authn;
     let request = require("@root/request");
     let rnd = require("./lib/rnd.js");
 
@@ -173,7 +168,7 @@ async function getUserByPassword(req) {
       throw err;
     }
 
-    return resp;
+    return null;
   }
 
   let store = {
@@ -186,17 +181,24 @@ async function getUserByPassword(req) {
     },
   };
 
-  let sessionMiddleware = require("./lib/session.js")(
+  let sessionMiddleware = require("./")(
     issuer,
-    process.env.HMAC_SECRET || process.env.COOKIE_SECRET,
-    {
-      keypair,
-      notify: notify,
-      store: store,
-      getClaims,
-      googleClientId: process.env.GOOGLE_CLIENT_ID,
-    }
+    process.env.PRIVATE_KEY,
+    // TODO is a default getClaims even possible?
+    getClaims
   );
+
+  sessionMiddleware.options({
+    //secret: process.env.HMAC_SECRET || process.env.COOKIE_SECRET,
+  });
+  sessionMiddleware.oidc({
+    google: { clientId: process.env.GOOGLE_CLIENT_ID },
+  });
+  sessionMiddleware.challenge({
+    notify: notify,
+    store: store,
+  });
+  sessionMiddleware.router();
 
   function greet(req, res) {
     return { message: "Hello, World!" };
@@ -209,30 +211,19 @@ async function getUserByPassword(req) {
     app.use("/", morgan("tiny"));
   }
   app.get("/hello", greet);
-  // /api/authn/{session,refresh,exchange}
-  app.use("/api/authn", sessionMiddleware);
+  // TODO is one of refresh,exchange redundant?
+  // /api/authn/{session,refresh,exchange,challenge,logout}
+  app.use("/api/authn", await sessionMiddleware.router());
   // /.well-known/openid-configuration
   // /.well-known/jwks.json
-  app.use("/", sessionMiddleware.wellKnown);
+  app.use("/", sessionMiddleware.wellKnown());
 
   //
   // API Middleware & Handlers
   //
   let bodyParser = require("body-parser");
   app.use("/api", bodyParser.json({ limit: "100kb" }));
-  app.use(
-    "/api",
-    verifyJwt({
-      iss: issuer,
-      strict: false,
-    })
-  );
-  app.use("/api", function (req, res, next) {
-    if (req.jws) {
-      req.user = req.jws.claims;
-    }
-    next();
-  });
+  app.use("/api", authenticate({ iss: issuer, optional: true }));
   if ("DEVELOPMENT" === process.env.ENV) {
     app.use("/api/debug/inspect", function (req, res) {
       res.json({ success: true, user: req.user || null });

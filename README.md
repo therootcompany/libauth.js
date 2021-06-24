@@ -1,38 +1,313 @@
-# NOTE
-
-I made this public because I'm live-streaming the creation of it, not because
-it's ready for consumption:
-
-LIVE CODING Recordings:
-https://www.youtube.com/playlist?list=PLxki0D-ilnqYmidRxvrQoF2jX67wH5OS0
-
 # auth3000
 
-Yet another auth library by AJ
+> Modern, OpenID Connect compatible authentication.
 
-Exchange Long-Lived (24h - 90d) Refresh Token (in Cookie) for Short-Lived (15m -
-24h) Session Token.
+```js
+// Authenticate Users
+let Auth3000 = require("auth3000");
+let sessionMiddleware = Auth3000(issuer, privkey, function (req) {
+  let { strategy, email, iss, ppid } = req.authn;
+
+  switch (strategy) {
+    case "oidc":
+      let claims = await Users.find({ email: email });
+      return { claims };
+    default:
+      throw new Error("unsupported auth strategy");
+  }
+});
+sessionMiddleware.oidc({ google: { clientId: "xxxx" } });
+sessionMiddleware.challenge({ notify, store });
+sessionMiddleware.credentials();
+
+// /api/authn/{session,refresh,exchange,challenge,logout}
+app.use("/api/authn", await sessionMiddleware.router());
+// /.well-known/openid-configuration
+app.use("/", await sessionMiddleware.wellKnown());
+```
+
+```js
+// Verify Tokens
+let verify = require("auth3000/middleware/");
+app.use("/api", verify({ iss: issuer }));
+
+app.use("/api/hello", function (req, res) {
+  console.log("claims:", req.user);
+  res.json({ message: "hello" });
+});
+```
+
+# Features
+
+- [x] Short-Lived ID & Access Tokens (default 1h, and 15m)
+- [x] Refresh Tokens in Cookie (default 30d)
+- [x] Refresh Endpoint (no localStorage!)
+- [x] Email & SMS Verification flow (bring-your-own-mailer)
+- [x] Logout (expire refresh cookie)
+
+Handling the following strategies:
+
+- [x] `oidc` - ex: Facebook Connect, Google Sign In, Microsoft Live
+- [x] `credentials` - bespoke, specified by you (probably username/password)
+- [x] `challenge` - a.k.a. "verification email" or "Magic Link" ( or SMS code)
+- [x] `refresh` - to refresh an `id_token` via refresh token cookie
+- [ ] `jwt` - to exchange an `id_token` for an `access_token`
+- [ ] `exchange`
+- [ ] `apikey`
+
+### Live Code Project
+
+This code was written live, in front of a combined YouTube & Twitch audience.
+
+If you want to see all 40+ hours of painstaking coding... here ya go:
+
+<https://www.youtube.com/playlist?list=PLxki0D-ilnqYmidRxvrQoF2jX67wH5OS0>
 
 # Usage
 
 ```js
-let sessionMiddleware = require("auth3000/lib/session.js")({
-  issuers: [issuer],
-  getIdClaims: getUser,
-  getAccessClaims: getUser,
-});
+let issuer = "http://localhost:3000";
+let secret = crypto.randomBytes(16).toString("base64");
+let privkey = fs.readFileSync("privkey.jwk.json", "utf8"); // or privkey.pem
 
-// /api/authn/{session,refresh,exchange}
-app.use("/", sessionMiddleware);
+let sessionMiddleware = require("auth3000")(issuer, privkey, function (req) {
+  let { strategy, email } = req.authn;
+  let idClaims;
+  let accessClaims;
+
+  switch (strategy) {
+    case "oidc":
+      idClaims = await Users.find({ email: email, iss: iss, ppid: ppid });
+      break;
+    case "credentials":
+      idClaims = await Users.findAndVerifyPassword({
+        user: req.body.user,
+        pass: req.body.pass,
+      });
+      break;
+    case "challenge":
+      idClaims = await Users.find({ email: email });
+      break;
+    default:
+      throw new Error("unsupported login strategy");
+  }
+
+  let { sub = "user_id", familiar_name = "Demo User" } = idClaims;
+  let { role = "user" } = await User.getRole({ user_id: sub });
+
+  // You can return a simple id_token (just profile info, no privileges)
+  // or an access_token (including roles, permissions, etc)
+  return {
+    id_claims: { sub, familiar_name },
+    access_claims: { sub, role },
+  };
+});
+sessionMiddleware.oidc({ google: { clientId: "xxxx" } });
+sessionMiddleware.challenge({ notify, store });
+sessionMiddleware.credentials();
+sessionMiddleware.options({ secret: secret, authnParam: "authn" });
+
+// /api/authn/{session,refresh,exchange,challenge,logout}
+app.use("/api/authn", await sessionMiddleware.router());
 
 // /.well-known/openid-configuration
 // /.well-known/jwks.json
-app.use("/", sessionMiddleware.wellKnown);
+app.use("/", await sessionMiddleware.wellKnown());
+
+//
+// Securing the API with ID & Access Tokens
+//
+let verify = require("auth3000/middleware/");
+app.use("/api", verify({ iss: issuer, optional: true }));
+
+app.use("/api/debug/inspect", function (req, res) {
+  res.json({ success: true, user: req.user || null });
+});
+
+app.use("/api/hello", function (req, res) {
+  if ("admin" !== req.user.role) {
+    res.json({ message: "goodbye" });
+    return;
+  }
+
+  res.json({ message: "hello" });
+});
 ```
 
+# Node API
+
+## Authentication (Issuer) Middleware
+
 ```js
-function getUser() {}
+let Auth3000 = require("auth3000");
+
+let sessionMiddleware = Auth3000(issuer privkey, getClaims);
+
+sessionMiddleware.oidc({ google: { clientId: "xxxx" } });
+sessionMiddleware.challenge({ notify, store });
+sessionMiddleware.credentials();
+
+await sessionMiddleware.router();
+await sessionMiddleware.wellKnown();
 ```
+
+### store (for Verification)
+
+The store is a simple Key/Value store. You could use any database, a file, or
+use the default (in-memory) if you're developing locally.
+
+```js
+// The store keeps track of state information for the
+// challenge verification. The values are intended to
+// be opaque.
+
+// `key`   - a string identifier
+// `value` - a JSON object (you should stringify this)
+await store.set(key, value);
+
+await store.get(key);
+```
+
+### notify (for Verification)
+
+The notify function is intended to be used for:
+
+- Email Verification
+- Phone Number Verification
+- Magic Link Login
+- Forgot Password
+
+```js
+function notify(req) {
+  let { type, value, secret, id, issuer, jws, issuer } = req.authn;
+
+  // What you should do:
+  //
+  //   1. Construct a URL with the ID and Secret
+  //      (or at least a page where the user can enter the secret)
+  //
+  //   2. Send a message via Email, SMS, or whatever you want to verify
+  //      (must provide 'secret', 'id' is somewhat optional)
+  //
+  //   3. `req.body` will have whatever you sent
+  //      (I use 'req.body.template' to send different messages for
+  //       forgot password, email verification, etc...)
+
+  await sendMessage(
+    req.body.template,
+    `${issuer}/my-login?id=${id}&secret=${secret}`
+  );
+
+  return null;
+}
+```
+
+```txt
+type    - the type of identifier you wish to verify
+          ex: 'email' or 'phone' (completely arbitrary, up to you)
+
+value   - the identifier itself
+          ex: 'john@example.com' or '+18005551234'
+
+secret  - the random string required to finalize the verification
+          ex: AB34-EF78
+
+id      - public id used for checking status of verification
+          ex: aBc1-3
+
+issuer  - what you provided as your base own url
+          ex: http://localhost:3000
+```
+
+### Verifier (Consumer) Middleware
+
+The verifier middleware checks that the token in `Authorization: Bearer <token>`
+has a valid signature by a trusted issuer, decodes it, and populates `req.user`
+and `req.jws` accordingly.
+
+```js
+let verify = require("auth3000/middleware/");
+
+app.use(
+  "/api",
+  verify({ iss: issuer, optional: true, userParam: "user", jwsParam: "jws" })
+);
+```
+
+These are the options that can be passed to `verify`:
+
+```txt
+iss         - the base url of the token issuer
+              ex: https://accounts.google.com
+
+optional    - token is not required
+              (but invalid tokens will be rejected)
+
+jwsParam    - the verified, decoded jwt will be available at `req[jwsParam]`
+              (default: 'jws' for `req.jws`, false to disable)
+
+userParam    - the `jws.claims` will be available at `req[userParam]`
+              (default: 'user' for `req.user`, false to disable)
+```
+
+`req.user` and `req.jws` will be available on all subsequent middleware.
+
+```js
+app.use("/api/debug/inspect", function (req, res) {
+  console.log(req.user);
+  console.log(req.jws);
+  res.json({ jws: req.jws, user: req.user });
+});
+```
+
+There are a variety of standard options, which you can read about in
+[the OIDC spec](https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims),
+as well as your own custom "claims" as provided by you in `getClaims`.
+
+```txt
+req.user    - the same as req.jws.claims, which include what you passed back
+              in `getClaims`, for example:
+              {
+                jti: "xxxx",
+                iat: 1622849000, // seconds since unix epoch
+                exp: 1622849600, // seconds since unix epoch
+                //
+                // + whatever you passed back in 'claims' for this token type
+                //
+                // Although claims is arbitrary, there is a set of Standard Claims:
+                // https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims
+                //
+              }
+
+req.jws     - JWS is the name for a decoded JWT. It looks like this:
+              {
+                header: {
+                  alg: "ES256",
+                  kid: "xxxxxxxx",
+                  typ: "JWT",
+                },
+                claims: {
+                  // see req.user above
+                },
+                protected: "<url-safe-base64-encoded-header>",
+                payload: "<url-safe-base64-encoded-claims>",
+                signature: "<verified-hash>",
+              }
+```
+
+## Generating Secrets & Private Keys
+
+Create a random string:
+
+```bash
+# OpenSSL
+openssl rand -base64 16
+
+# Or /dev/urandom
+xxd -l16 -ps /dev/urandom
+```
+
+Create a private key:
 
 ```bash
 curl https://webinstall.dev/keypairs | bash
@@ -42,8 +317,8 @@ keypairs gen --key key.jwk.json --pub pub.jwk.json
 ```bash
 #!/bin/bash
 
-PRIVATE_KEY="$(keypairs gen 2>/dev/null)"
-echo "PRIVATE_KEY='${PRIVATE_KEY}'" >> .env
+keypairs gen > key.jwk.json 2> pub.jwk.json
+echo "PRIVATE_KEY='./key.jwk.json'" >> .env
 ```
 
 Create a server-to-server pre-shared token
@@ -60,7 +335,7 @@ SERVER_TOKEN="$(keypairs sign --exp '1577880000s' ./key.jwk.json '{ "iss": "http
 echo "SERVER_TOKEN=${SERVER_TOKEN}" >> .env
 ```
 
-# Session API
+# HTTP Session API
 
 ## POST /api/authn/session
 
@@ -203,7 +478,7 @@ Set-Cookie: <empty-and-expired-cookie-value>
 }
 ```
 
-# Magic Link API
+# HTTP Magic Link (verification) API
 
 This is complex because there are at least 3 components:
 
@@ -232,14 +507,14 @@ A possible flow for that:
      - Verification tab should ask "Continue to App?" and then "Remember this
        Device for 30 days?"
 
-## POST /api/authn/challenge/issue
+## POST /api/authn/challenge/order
 
 This should call `notify` which should send an email according to a template.
 
 Request
 
 ```txt
-POST /api/authn/challenge/issue
+POST /api/authn/challenge/order
 ```
 
 ```json
@@ -260,21 +535,22 @@ Response
 {
   "success": "true",
   //"retry_after": "2021-06-01T13:59:59.000Z",
-  "challenge_token": "xxxx.yyyy.zzzz"
+  "receipt": "xxxx.yyyy.zzzz"
 }
 ```
 
-## POST /api/authn/challenge/complete
+## POST /api/authn/challenge/finalize
 
 Request
 
 ```txt
-POST /api/auth/challenge/complete
+POST /api/auth/challenge/finalize
 ```
 
 ```json
 {
-  "verification_token": "xxxx.yyyy.zzzz"
+  "id": "abc123",
+  "secret": "AB34-EF78"
 }
 ```
 
@@ -289,7 +565,8 @@ Response
 
 ```json
 {
-  "id_token": "xxxx.yyyy.zzzz"
+  "id_token": "xxxx.yyyy.zzzz",
+  "access_token": "xxx2.yyy2.zzz2"
 }
 ```
 
@@ -297,12 +574,13 @@ Response
 
 Request
 
-Use either `challenge_token` or `secret`.
+Use either `receipt` or `secret`.
 
 ```txt
 GET /api/auth/challenge
-    ?challenge_token=xxxx.yyyy.zzzz
-    &secret=xxyyzz
+    ?id=abc123
+    &receipt=yyyyyyyy
+    &secret=AB34-EF78
 ```
 
 Response
@@ -332,7 +610,7 @@ Either `verified_at` will be empty, or it will have a value.
   "ordered_at": "2021-06-20T13:30:59Z",
   "ordered_by": "Chrome/x.y.z Windows 10",
   "verified_at": "2021-06-20T13:31:42Z",
-  "ordered_by": "Safari/x.y iPhone iOS 17"
+  "verefied_by": "Safari/x.y iPhone iOS 17"
 }
 ```
 
@@ -341,13 +619,13 @@ Either `verified_at` will be empty, or it will have a value.
 Request
 
 ```txt
-POST /api/auth/challenge/claim
-Authorization: Bearer <challenge_token>
+POST /api/auth/challenge/exchange
 ```
 
 ```json
 {
-  "challenge_token": "xxxx.yyyy.zzzz"
+  "id": "abc123",
+  "receipt": "yyyyyyyy"
 }
 ```
 
@@ -365,6 +643,7 @@ Response
   "success": true,
   "status": "valid",
   "id_token": "xxxx.yyyy.zzzz"
+  "access_token": "xxx2.yyy2.zzz2"
 }
 ```
 
@@ -374,3 +653,4 @@ Response
   of the making of this project
 - [Express Cookies Cheat Sheet](https://github.com/BeyondCodeBootcamp/beyondcodebootcamp.com/blob/main/articles/express-cookies-cheatsheet.md)
 - [How to add Google Sign In](https://therootcompany.com/blog/google-sign-in-javascript-api/)
+- [How many Bits of Entropy per Character in...](https://therootcompany.com/blog/how-many-bits-of-entropy-per-character/)
