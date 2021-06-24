@@ -13,14 +13,62 @@ Yet another auth library by AJ
 Exchange Long-Lived (24h - 90d) Refresh Token (in Cookie) for Short-Lived (15m -
 24h) Session Token.
 
+Provides a framework for handling the following strategies:
+
+- [x] `oidc` - ex: Facebook Connect, Google Sign In, Microsoft Live
+- [x] `credentials` - bespoke, specified by you (probably username/password)
+- [x] `challenge` - a.k.a. "verification email" or "Magic Link" ( or SMS code)
+- [x] `refresh` - to refresh an `id_token` via refresh token cookie
+- [ ] `jwt` - to exchange an `id_token` for an `access_token`
+- [ ] `exchange`
+- [ ] `apikey`
+
 # Usage
 
 ```js
-let sessionMiddleware = require("auth3000/lib/session.js")({
-  issuers: [issuer],
-  getIdClaims: getUser,
-  getAccessClaims: getUser,
-});
+let issuer = "http://localhost:3000";
+let secret = crypto.randomBytes(16).toString("base64");
+let privkey = fs.readFileSync("privkey.jwk.json", "utf8"); // or privkey.pem
+
+let sessionMiddleware = require("auth3000/lib/session.js")(
+  issuer,
+  secret,
+  privkey,
+  { getClaims, notify }
+);
+
+function getClaims(req) {
+  let { strategy, email } = req.authn;
+  let idClaims;
+  let accessClaims;
+
+  switch (strategy) {
+    case "oidc":
+      idClaims = await Users.find({ email: email, iss: iss, ppid: ppid });
+      break;
+    case "credentials":
+      idClaims = await Users.findAndVerifyPassword({
+        user: req.body.user,
+        pass: req.body.pass,
+      });
+      break;
+    case "challenge":
+      idClaims = await Users.find({ email: email });
+      break;
+    default:
+      throw new Error("unsupported login strategy");
+  }
+
+  let { sub = "user_id", familiar_name = "Demo User" } = idClaims;
+  let { role = "user" } = await User.getRole({ user_id: sub });
+
+  // You can return a simple id_token (just profile info, no privileges)
+  // or an access_token (including roles, permissions, etc)
+  return {
+    id_claims: { sub, familiar_name },
+    access_claims: { sub, role },
+  };
+}
 
 // /api/authn/{session,refresh,exchange}
 app.use("/", sessionMiddleware);
@@ -31,12 +79,51 @@ app.use("/", sessionMiddleware.wellKnown);
 ```
 
 ```js
-function getUser() {}
+function getClaims(req) {
+  let;
+}
 ```
 
 ```bash
 curl https://webinstall.dev/keypairs | bash
 keypairs gen --key key.jwk.json --pub pub.jwk.json
+```
+
+# Verification
+
+The notify function is intended to be used for:
+
+- Email Verification
+- Phone Number Verification
+- Magic Link Login
+- Forgot Password
+
+```js
+function notify(req) {
+  let {
+    // ex: email | phone
+    type,
+    // ex: john@example.com | +1 555-555-1234
+    value,
+    // ex: A78D-E211 - what you use to finalize the verification
+    secret,
+    // random string used for checking status of verification
+    id,
+    // ex: http://localhost:3000 - what you provided as your base own url
+    issuer,
+  } = req.authn;
+
+  // What YOU do:
+  // Construct and send and email or SMS message to your user
+  // with a URL that they click where you take the parameters
+  // and send them back to the API.
+  await sendMessage(
+    req.body.template,
+    `${issuer}/my-login?id=${id}&secret=${secret}`
+  );
+
+  return null;
+}
 ```
 
 ```bash

@@ -11,23 +11,12 @@ async function main() {
   let verifyJwt = require("./lib/middleware.js");
   let issuer = process.env.BASE_URL || `http://localhost:${process.env.PORT}`;
 
-  // TODO reduce boilerplate?
-  let Keypairs = require("keypairs");
-  let keypair = await Keypairs.parse({ key: process.env.PRIVATE_KEY }).catch(
-    function (e) {
-      // could not be parsed or was a public key
-      console.warn(
-        "Warn: PRIVATE_KEY could not be parsed! Generating a temporary key."
-      );
-      console.warn(e);
-      return Keypairs.generate();
-    }
-  );
-
   let DB = require("./db.js");
   async function getClaims(req) {
     let { strategy, email, iss, ppid, jws } = req.authn;
 
+    // TODO document strategies
+    console.log("strategy:", strategy);
     switch (strategy) {
       case "exchange":
         return getAccessClaims(req);
@@ -35,9 +24,7 @@ async function main() {
       // continue
     }
 
-    // TODO credentials
     // TODO MFA
-    // TODO ppid vs id vs sub?
     let user = await DB.get({
       email: email || (req.body && req.body.user),
       ppid: ppid,
@@ -87,11 +74,16 @@ async function main() {
     }
 
     return {
+      // generic authn, token-related things
       claims: {
-        // authn things, but handy
         sub: user.sub,
+      },
+      // authn-only things
+      id_claims: {
         first_name: user.first_name,
-        // authz things
+      },
+      // authz things
+      access_claims: {
         account_id: user.account_id,
         roles: user.roles,
       },
@@ -176,7 +168,7 @@ async function getUserByPassword(req) {
       throw err;
     }
 
-    return resp;
+    return null;
   }
 
   let store = {
@@ -192,12 +184,14 @@ async function getUserByPassword(req) {
   let sessionMiddleware = require("./lib/session.js")(
     issuer,
     process.env.HMAC_SECRET || process.env.COOKIE_SECRET,
+    process.env.PRIVATE_KEY,
     {
-      keypair,
+      // TODO is a default getClaims even possible?
+      getClaims,
+      // TODO default development notify
       notify: notify,
       store: store,
-      getClaims,
-      googleClientId: process.env.GOOGLE_CLIENT_ID,
+      oidc: { google: { clientId: process.env.GOOGLE_CLIENT_ID } },
     }
   );
 
