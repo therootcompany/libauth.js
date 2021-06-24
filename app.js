@@ -219,12 +219,6 @@ async function getUserByPassword(req) {
   let bodyParser = require("body-parser");
   app.use("/api", bodyParser.json({ limit: "100kb" }));
   app.use("/api", verifyJwt({ iss: issuer, optional: true }));
-  app.use("/api", function (req, res, next) {
-    if (req.jws) {
-      req.user = req.jws.claims;
-    }
-    next();
-  });
   if ("DEVELOPMENT" === process.env.ENV) {
     app.use("/api/debug/inspect", function (req, res) {
       res.json({ success: true, user: req.user || null });
