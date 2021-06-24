@@ -7,7 +7,7 @@
   // scheme => 'https:'
   // host => 'localhost:3000'
   // pathname => '/api/authn/session/oidc/google.com'
-  let baseUrl = document.location.protocol + "//" + document.location.host;
+  let baseUrl = `${document.location.protocol}//${document.location.host}`;
 
   // AJQuery
   function $(sel) {
@@ -19,9 +19,8 @@
   function die(err) {
     console.error(err);
     window.alert(
-      "Oops! There was an unexpected error on the server.\nIt's not your fault.\n\n" +
-        "Technical Details for Tech Support: \n" +
-        err.message
+      `Oops! There was an unexpected error on the server.\nIt's not your fault.\n\n` +
+        `Technical Details for Tech Support: \n${err.message}`
     );
     throw err;
   }
@@ -45,7 +44,7 @@
   }
 
   async function requestVerification(email) {
-    let resp = await window.fetch(baseUrl + "/api/authn/challenge/issue", {
+    let resp = await window.fetch(baseUrl + "/api/authn/challenge/order", {
       method: "POST",
       headers: {
         //Authorization: "Bearer " + (result.id_token || result.access_token),
@@ -63,13 +62,12 @@
     return resp;
   }
 
-  async function requestMeta({ secret, challenge_token }) {
+  async function checkStatus({ secret = "", receipt = "", id = "" }) {
     let resp = await window.fetch(
-      baseUrl +
-        "/api/authn/challenge?challenge_token=" +
-        (challenge_token || "") +
-        "&token=" +
-        (secret || ""),
+      `${baseUrl}/api/authn/challenge` +
+        `?id=${id}` +
+        `&receipt=${receipt}` +
+        `&token=${secret}`,
       {}
     );
 
@@ -78,12 +76,12 @@
     return resp;
   }
 
-  async function finalizeVerification({ challenge_token, secret, trust }) {
+  async function finalizeVerification({ secret, receipt, id, trust }) {
     let url;
     if (secret) {
-      url = baseUrl + "/api/authn/challenge/complete";
+      url = `${baseUrl}/api/authn/challenge/finalize`;
     } else {
-      url = baseUrl + "/api/authn/challenge/exchange";
+      url = `${baseUrl}/api/authn/challenge/exchange`;
     }
 
     let resp = await window.fetch(url, {
@@ -92,8 +90,9 @@
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        challenge_token,
+        receipt,
         token: secret,
+        id,
         trust_device: trust,
       }),
     });
@@ -124,24 +123,32 @@
     let resp = await requestVerification(email).catch(die);
 
     if (resp.data._development_secret) {
-      let link = baseUrl + "#login?token=" + resp.data._development_secret;
+      let link =
+        `${baseUrl}#login` +
+        `?id=${resp.data.id}` +
+        `&token=${resp.data._development_secret}`;
       $("a.js-magic-dev-link").href = link;
       $("a.js-magic-dev-link").innerText = link;
       $("a.js-magic-dev-link").hidden = false;
     }
     console.log("Order Response", resp.data);
 
-    // TODO fallback when localStorage is not available
-    localStorage.setItem("auth3000:id:" + resp.data.id, Date.now().toString());
+    try {
+      localStorage.setItem(
+        `auth3000:id:${resp.data.id}`,
+        Date.now().toString()
+      );
+    } catch (e) {
+      // TODO fallback when localStorage is not available
+    }
 
-    let challenge_token = resp.data.challenge_token;
+    let receipt = resp.data.receipt;
+    let id = resp.data.id;
     while (true) {
       // TODO timeout after 15 minutes
       await sleep(1000);
-      let metaResp = await requestMeta({
-        challenge_token,
-      });
-      let meta = metaResp.data;
+      let statusResp = await checkStatus({ id, receipt });
+      let meta = statusResp.data;
       console.log("[DEBUG] Poll Result", meta);
       if (meta.verified_by) {
         if (meta.ordered_by === meta.verified_by) {
@@ -151,7 +158,7 @@
           return;
         }
         $(".js-magic-check").hidden = true;
-        await promptRememberDevice({ challenge_token });
+        await promptRememberDevice({ receipt, id });
         break;
       }
     }
@@ -179,7 +186,7 @@
     // TODO loading spinner
     $("form.js-magic-info").hidden = false;
 
-    let resp = await requestMeta({ secret: query.token });
+    let resp = await checkStatus({ id: query.id, secret: query.token });
     // Show the token for easy capture
     console.log("magic info:", resp.data);
     if (!resp.data.ordered_by) {
@@ -189,17 +196,17 @@
 
     if (
       resp.data.ordered_by === navigator.userAgent &&
-      localStorage.getItem("auth3000:id:" + resp.data.id)
+      localStorage.getItem(`auth3000:id:${resp.data.id}`)
     ) {
       // this is the same browser we started in
       $(".js-login-message").innerText = "";
     } else {
       $(".js-login-message").innerText = resp.data.ordered_by;
     }
-    await promptRememberDevice({ secret: query.token });
+    await promptRememberDevice({ secret: query.token, id: query.id });
   }
 
-  async function promptRememberDevice({ challenge_token, secret }) {
+  async function promptRememberDevice({ secret, receipt, id }) {
     $("form.js-magic-info").hidden = false;
 
     return new Promise(function (resolve, reject) {
@@ -213,7 +220,7 @@
         ev.stopPropagation();
 
         // TODO change this if the default is to NOT trust
-        await finalizeVerification({ challenge_token, secret, trust: true })
+        await finalizeVerification({ secret, receipt, id, trust: true })
           .then(dashboardOrClose)
           .catch(die)
           .then(resolve)
@@ -225,7 +232,7 @@
         ev.preventDefault();
         ev.stopPropagation();
 
-        await finalizeVerification({ challenge_token, secret, trust: false })
+        await finalizeVerification({ receipt, secret, trust: false })
           .then(dashboardOrClose)
           .catch(die)
           .then(resolve)
