@@ -209,7 +209,8 @@ async function getUserByPassword(req) {
     app.use("/", morgan("tiny"));
   }
   app.get("/hello", greet);
-  // /api/authn/{session,refresh,exchange}
+  // TODO is one of refresh,exchange redundant?
+  // /api/authn/{session,refresh,exchange,challenge,logout}
   app.use("/api/authn", sessionMiddleware);
   // /.well-known/openid-configuration
   // /.well-known/jwks.json
