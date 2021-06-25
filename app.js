@@ -8,7 +8,7 @@ async function main() {
   let express = require("express");
   let app = require("@root/async-router").Router();
 
-  let verifyJwt = require("./lib/middleware.js");
+  let authenticate = require("./middleware/");
   let issuer = process.env.BASE_URL || `http://localhost:${process.env.PORT}`;
 
   let DB = require("./db.js");
@@ -181,7 +181,7 @@ async function getUserByPassword(req) {
     },
   };
 
-  let sessionMiddleware = require("./lib/session.js")(
+  let sessionMiddleware = require("./")(
     issuer,
     process.env.HMAC_SECRET || process.env.COOKIE_SECRET,
     process.env.PRIVATE_KEY,
@@ -218,7 +218,7 @@ async function getUserByPassword(req) {
   //
   let bodyParser = require("body-parser");
   app.use("/api", bodyParser.json({ limit: "100kb" }));
-  app.use("/api", verifyJwt({ iss: issuer, optional: true }));
+  app.use("/api", authenticate({ iss: issuer, optional: true }));
   if ("DEVELOPMENT" === process.env.ENV) {
     app.use("/api/debug/inspect", function (req, res) {
       res.json({ success: true, user: req.user || null });

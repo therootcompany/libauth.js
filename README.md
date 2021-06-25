@@ -1,19 +1,51 @@
-# NOTE
-
-I made this public because I'm live-streaming the creation of it, not because
-it's ready for consumption:
-
-LIVE CODING Recordings:
-https://www.youtube.com/playlist?list=PLxki0D-ilnqYmidRxvrQoF2jX67wH5OS0
-
 # auth3000
 
-Yet another auth library by AJ
+> Modern, OpenID Connect compatible authentication.
 
-Exchange Long-Lived (24h - 90d) Refresh Token (in Cookie) for Short-Lived (15m -
-24h) Session Token.
+```js
+// Authenticate Users
+let Auth3000 = require("auth3000");
+let sessionMiddleware = Auth3000(issuer, secret, privkey, {
+  oidc: { google: { clientId: "xxxx" } },
+  getClaims: function (req) {
+    let { strategy, email, iss, ppid } = req.authn;
 
-Provides a framework for handling the following strategies:
+    switch (strategy) {
+      case "oidc":
+        let claims = await Users.find({ email: email });
+        return { claims };
+      default:
+        throw new Error("unsupported auth strategy");
+    }
+  },
+});
+
+// /api/authn/{session,refresh,exchange,challenge,logout}
+app.use("/", sessionMiddleware);
+```
+
+```js
+// Verify Tokens
+let verify = require("auth3000/middleware/");
+app.use("/api", verify({ iss: issuer, optional: true }));
+
+app.use("/api/debug/inspect", function (req, res) {
+  res.json({
+    success: true,
+    user: req.user || null,
+  });
+});
+```
+
+# Features
+
+- [x] Short-Lived ID & Access Tokens (default 1h, and 15m)
+- [x] Refresh Tokens in Cookie (default 30d)
+- [x] Refresh Endpoint (no localStorage!)
+- [x] Email & SMS Verification flow (bring-your-own-mailer)
+- [x] Logout (expire refresh cookie)
+
+Handling the following strategies:
 
 - [x] `oidc` - ex: Facebook Connect, Google Sign In, Microsoft Live
 - [x] `credentials` - bespoke, specified by you (probably username/password)
@@ -23,6 +55,14 @@ Provides a framework for handling the following strategies:
 - [ ] `exchange`
 - [ ] `apikey`
 
+### Live Code Project
+
+This code was written live, in front of a combined YouTube & Twitch audience.
+
+If you want to see all 40+ hours of painstaking coding... here ya go:
+
+<https://www.youtube.com/playlist?list=PLxki0D-ilnqYmidRxvrQoF2jX67wH5OS0>
+
 # Usage
 
 ```js
@@ -30,12 +70,10 @@ let issuer = "http://localhost:3000";
 let secret = crypto.randomBytes(16).toString("base64");
 let privkey = fs.readFileSync("privkey.jwk.json", "utf8"); // or privkey.pem
 
-let sessionMiddleware = require("auth3000/lib/session.js")(
-  issuer,
-  secret,
-  privkey,
-  { getClaims, notify }
-);
+let sessionMiddleware = require("auth3000")(issuer, secret, privkey, {
+  getClaims,
+  notify,
+});
 
 function getClaims(req) {
   let { strategy, email } = req.authn;
@@ -70,18 +108,31 @@ function getClaims(req) {
   };
 }
 
-// /api/authn/{session,refresh,exchange}
+// /api/authn/{session,refresh,exchange,challenge,logout}
 app.use("/", sessionMiddleware);
 
 // /.well-known/openid-configuration
 // /.well-known/jwks.json
 app.use("/", sessionMiddleware.wellKnown);
-```
 
-```js
-function getClaims(req) {
-  let;
-}
+//
+// Securing the API with ID & Access Tokens
+//
+let verify = require("auth3000/middleware/");
+app.use("/api", verify({ iss: issuer, optional: true }));
+
+app.use("/api/debug/inspect", function (req, res) {
+  res.json({ success: true, user: req.user || null });
+});
+
+app.use("/api/hello", function (req, res) {
+  if ("admin" !== req.user.role) {
+    res.json({ message: "goodbye" });
+    return;
+  }
+
+  res.json({ message: "hello" });
+});
 ```
 
 ```bash
@@ -89,7 +140,19 @@ curl https://webinstall.dev/keypairs | bash
 keypairs gen --key key.jwk.json --pub pub.jwk.json
 ```
 
-# Verification
+# Node API
+
+## Authentication (Issuer) Middleware
+
+```js
+let Auth3000 = require("auth3000");
+let sessionMiddleware = Auth3000(issuer, secret, privkey, {
+  oidc: { google: { clientId: "xxxx" } },
+  getClaims,
+});
+```
+
+### notify (for Verification)
 
 The notify function is intended to be used for:
 
@@ -126,11 +189,91 @@ function notify(req) {
 }
 ```
 
+### Verifier (Consumer) Middleware
+
+```js
+let verify = require("auth3000/middleware/");
+
+app.use(
+  "/api",
+  verify({
+    iss: issuer,
+    optional: true,
+    userParam: "user",
+    jwsParam: "jws",
+  })
+);
+```
+
+```txt
+iss         - the base url of the token issuer
+              ex: https://accounts.google.com
+
+optional    - token is not required
+              (but invalid tokens will be rejected)
+
+jwsParam    - the verified, decoded jwt will be available at `req[jwsParam]`
+              (default: 'jws' for `req.jws`, false to disable)
+
+userParam    - the `jws.claims` will be available at `req[userParam]`
+              (default: 'user' for `req.user`, false to disable)
+```
+
+```js
+app.use("/api/debug/inspect", function (req, res) {
+  console.log(req.user);
+  console.log(req.jws);
+  res.json({ jws: req.jws, user: req.user });
+});
+```
+
+```txt
+req.user    - the same as req.jws.claims, which include what you passed back
+              in `getClaims`, for example:
+              {
+                jti: "xxxx",
+                iat: 1622849000, // seconds since unix epoch
+                exp: 1622849600, // seconds since unix epoch
+                //
+                // + whatever you passed back in 'claims' for this token type
+                //
+              }
+
+req.jws     - JWS is the name for a decoded JWT. It looks like this:
+              {
+                header: {
+                  alg: "ES256",
+                  kid: "xxxxxxxx",
+                  typ: "JWT",
+                },
+                claims: {
+                  // see req.user above
+                },
+                protected: "<url-safe-base64-encoded-header>",
+                payload: "<url-safe-base64-encoded-claims>",
+                signature: "<verified-hash>",
+              }
+```
+
+## Generating Secrets & Private Keys
+
+Create a random string:
+
+```bash
+# OpenSSL
+openssl rand -base64 16
+
+# Or /dev/urandom
+xxd -l16 -ps /dev/urandom
+```
+
+Create a private key:
+
 ```bash
 #!/bin/bash
 
-PRIVATE_KEY="$(keypairs gen 2>/dev/null)"
-echo "PRIVATE_KEY='${PRIVATE_KEY}'" >> .env
+keypairs gen > key.jwk.json 2> pub.jwk.json
+echo "PRIVATE_KEY='./key.jwk.json'" >> .env
 ```
 
 Create a server-to-server pre-shared token
@@ -147,7 +290,7 @@ SERVER_TOKEN="$(keypairs sign --exp '1577880000s' ./key.jwk.json '{ "iss": "http
 echo "SERVER_TOKEN=${SERVER_TOKEN}" >> .env
 ```
 
-# Session API
+# HTTP Session API
 
 ## POST /api/authn/session
 
@@ -290,7 +433,7 @@ Set-Cookie: <empty-and-expired-cookie-value>
 }
 ```
 
-# Magic Link API
+# HTTP Magic Link (verification) API
 
 This is complex because there are at least 3 components:
 
@@ -319,14 +462,14 @@ A possible flow for that:
      - Verification tab should ask "Continue to App?" and then "Remember this
        Device for 30 days?"
 
-## POST /api/authn/challenge/issue
+## POST /api/authn/challenge/order
 
 This should call `notify` which should send an email according to a template.
 
 Request
 
 ```txt
-POST /api/authn/challenge/issue
+POST /api/authn/challenge/order
 ```
 
 ```json
@@ -347,21 +490,22 @@ Response
 {
   "success": "true",
   //"retry_after": "2021-06-01T13:59:59.000Z",
-  "challenge_token": "xxxx.yyyy.zzzz"
+  "receipt": "xxxx.yyyy.zzzz"
 }
 ```
 
-## POST /api/authn/challenge/complete
+## POST /api/authn/challenge/finalize
 
 Request
 
 ```txt
-POST /api/auth/challenge/complete
+POST /api/auth/challenge/finalize
 ```
 
 ```json
 {
-  "verification_token": "xxxx.yyyy.zzzz"
+  "id": "abc123",
+  "secret": "AB34-EF78"
 }
 ```
 
@@ -376,7 +520,8 @@ Response
 
 ```json
 {
-  "id_token": "xxxx.yyyy.zzzz"
+  "id_token": "xxxx.yyyy.zzzz",
+  "access_token": "xxx2.yyy2.zzz2"
 }
 ```
 
@@ -384,12 +529,13 @@ Response
 
 Request
 
-Use either `challenge_token` or `secret`.
+Use either `receipt` or `secret`.
 
 ```txt
 GET /api/auth/challenge
-    ?challenge_token=xxxx.yyyy.zzzz
-    &secret=xxyyzz
+    ?id=abc123
+    &receipt=yyyyyyyy
+    &secret=AB34-EF78
 ```
 
 Response
@@ -419,7 +565,7 @@ Either `verified_at` will be empty, or it will have a value.
   "ordered_at": "2021-06-20T13:30:59Z",
   "ordered_by": "Chrome/x.y.z Windows 10",
   "verified_at": "2021-06-20T13:31:42Z",
-  "ordered_by": "Safari/x.y iPhone iOS 17"
+  "verefied_by": "Safari/x.y iPhone iOS 17"
 }
 ```
 
@@ -428,13 +574,13 @@ Either `verified_at` will be empty, or it will have a value.
 Request
 
 ```txt
-POST /api/auth/challenge/claim
-Authorization: Bearer <challenge_token>
+POST /api/auth/challenge/exchange
 ```
 
 ```json
 {
-  "challenge_token": "xxxx.yyyy.zzzz"
+  "id": "abc123",
+  "receipt": "yyyyyyyy"
 }
 ```
 
@@ -452,6 +598,7 @@ Response
   "success": true,
   "status": "valid",
   "id_token": "xxxx.yyyy.zzzz"
+  "access_token": "xxx2.yyy2.zzz2"
 }
 ```
 
@@ -461,3 +608,4 @@ Response
   of the making of this project
 - [Express Cookies Cheat Sheet](https://github.com/BeyondCodeBootcamp/beyondcodebootcamp.com/blob/main/articles/express-cookies-cheatsheet.md)
 - [How to add Google Sign In](https://therootcompany.com/blog/google-sign-in-javascript-api/)
+- [How many Bits of Entropy per Character in...](https://therootcompany.com/blog/how-many-bits-of-entropy-per-character/)

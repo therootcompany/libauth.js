@@ -1,7 +1,7 @@
 "use strict";
 
 let Keyfetch = require("keyfetch");
-let E = require("./errors.js");
+let E = require("../lib/errors.js");
 
 module.exports = function authMiddleware({
   pub,
