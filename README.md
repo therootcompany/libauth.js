@@ -5,25 +5,25 @@
 ```js
 // Authenticate Users
 let Auth3000 = require("auth3000");
-let sessionMiddleware = Auth3000(issuer, secret, privkey, {
-  oidc: { google: { clientId: "xxxx" } },
-  getClaims: function (req) {
-    let { strategy, email, iss, ppid } = req.authn;
+let sessionMiddleware = Auth3000(issuer, privkey, function (req) {
+  let { strategy, email, iss, ppid } = req.authn;
 
-    switch (strategy) {
-      case "oidc":
-        let claims = await Users.find({ email: email });
-        return { claims };
-      default:
-        throw new Error("unsupported auth strategy");
-    }
-  },
+  switch (strategy) {
+    case "oidc":
+      let claims = await Users.find({ email: email });
+      return { claims };
+    default:
+      throw new Error("unsupported auth strategy");
+  }
 });
+sessionMiddleware.oidc({ google: { clientId: "xxxx" } });
+sessionMiddleware.challenge({ notify, store });
+sessionMiddleware.credentials();
 
 // /api/authn/{session,refresh,exchange,challenge,logout}
-app.use("/api/authn", sessionMiddleware);
+app.use("/api/authn", sessionMiddleware.router());
 // /.well-known/openid-configuration
-app.use("/", sessionMiddleware.wellKnown);
+app.use("/", sessionMiddleware.wellKnown());
 ```
 
 ```js
@@ -70,12 +70,7 @@ let issuer = "http://localhost:3000";
 let secret = crypto.randomBytes(16).toString("base64");
 let privkey = fs.readFileSync("privkey.jwk.json", "utf8"); // or privkey.pem
 
-let sessionMiddleware = require("auth3000")(issuer, secret, privkey, {
-  getClaims,
-  notify,
-});
-
-function getClaims(req) {
+let sessionMiddleware = require("auth3000")(issuer, privkey, function (req) {
   let { strategy, email } = req.authn;
   let idClaims;
   let accessClaims;
@@ -106,14 +101,18 @@ function getClaims(req) {
     id_claims: { sub, familiar_name },
     access_claims: { sub, role },
   };
-}
+});
+sessionMiddleware.oidc({ google: { clientId: "xxxx" } });
+sessionMiddleware.challenge({ notify, store });
+sessionMiddleware.credentials();
+sessionMiddleware.options({ secret: secret, authnParam: "authn" });
 
 // /api/authn/{session,refresh,exchange,challenge,logout}
-app.use("/api/authn", sessionMiddleware);
+app.use("/api/authn", sessionMiddleware.router());
 
 // /.well-known/openid-configuration
 // /.well-known/jwks.json
-app.use("/", sessionMiddleware.wellKnown);
+app.use("/", sessionMiddleware.wellKnown());
 
 //
 // Securing the API with ID & Access Tokens
