@@ -21,19 +21,19 @@ let sessionMiddleware = Auth3000(issuer, secret, privkey, {
 });
 
 // /api/authn/{session,refresh,exchange,challenge,logout}
-app.use("/", sessionMiddleware);
+app.use("/api/authn", sessionMiddleware);
+// /.well-known/openid-configuration
+app.use("/", sessionMiddleware.wellKnown);
 ```
 
 ```js
 // Verify Tokens
 let verify = require("auth3000/middleware/");
-app.use("/api", verify({ iss: issuer, optional: true }));
+app.use("/api", verify({ iss: issuer }));
 
-app.use("/api/debug/inspect", function (req, res) {
-  res.json({
-    success: true,
-    user: req.user || null,
-  });
+app.use("/api/hello", function (req, res) {
+  console.log("claims:", req.user);
+  res.json({ message: "hello" });
 });
 ```
 
@@ -109,7 +109,7 @@ function getClaims(req) {
 }
 
 // /api/authn/{session,refresh,exchange,challenge,logout}
-app.use("/", sessionMiddleware);
+app.use("/api/authn", sessionMiddleware);
 
 // /.well-known/openid-configuration
 // /.well-known/jwks.json
@@ -135,11 +135,6 @@ app.use("/api/hello", function (req, res) {
 });
 ```
 
-```bash
-curl https://webinstall.dev/keypairs | bash
-keypairs gen --key key.jwk.json --pub pub.jwk.json
-```
-
 # Node API
 
 ## Authentication (Issuer) Middleware
@@ -163,23 +158,20 @@ The notify function is intended to be used for:
 
 ```js
 function notify(req) {
-  let {
-    // ex: email | phone
-    type,
-    // ex: john@example.com | +1 555-555-1234
-    value,
-    // ex: A78D-E211 - what you use to finalize the verification
-    secret,
-    // random string used for checking status of verification
-    id,
-    // ex: http://localhost:3000 - what you provided as your base own url
-    issuer,
-  } = req.authn;
+  let { type, value, secret, id, issuer, jws, issuer } = req.authn;
 
-  // What YOU do:
-  // Construct and send and email or SMS message to your user
-  // with a URL that they click where you take the parameters
-  // and send them back to the API.
+  // What you should do:
+  //
+  //   1. Construct a URL with the ID and Secret
+  //      (or at least a page where the user can enter the secret)
+  //
+  //   2. Send a message via Email, SMS, or whatever you want to verify
+  //      (must provide 'secret', 'id' is somewhat optional)
+  //
+  //   3. `req.body` will have whatever you sent
+  //      (I use 'req.body.template' to send different messages for
+  //       forgot password, email verification, etc...)
+
   await sendMessage(
     req.body.template,
     `${issuer}/my-login?id=${id}&secret=${secret}`
@@ -189,21 +181,39 @@ function notify(req) {
 }
 ```
 
+```txt
+type    - the type of identifier you wish to verify
+          ex: 'email' or 'phone' (completely arbitrary, up to you)
+
+value   - the identifier itself
+          ex: 'john@example.com' or '+18005551234'
+
+secret  - the random string required to finalize the verification
+          ex: AB34-EF78
+
+id      - public id used for checking status of verification
+          ex: aBc1-3
+
+issuer  - what you provided as your base own url
+          ex: http://localhost:3000
+```
+
 ### Verifier (Consumer) Middleware
+
+The verifier middleware checks that the token in `Authorization: Bearer <token>`
+has a valid signature by a trusted issuer, decodes it, and populates `req.user`
+and `req.jws` accordingly.
 
 ```js
 let verify = require("auth3000/middleware/");
 
 app.use(
   "/api",
-  verify({
-    iss: issuer,
-    optional: true,
-    userParam: "user",
-    jwsParam: "jws",
-  })
+  verify({ iss: issuer, optional: true, userParam: "user", jwsParam: "jws" })
 );
 ```
+
+These are the options that can be passed to `verify`:
 
 ```txt
 iss         - the base url of the token issuer
@@ -219,6 +229,8 @@ userParam    - the `jws.claims` will be available at `req[userParam]`
               (default: 'user' for `req.user`, false to disable)
 ```
 
+`req.user` and `req.jws` will be available on all subsequent middleware.
+
 ```js
 app.use("/api/debug/inspect", function (req, res) {
   console.log(req.user);
@@ -226,6 +238,10 @@ app.use("/api/debug/inspect", function (req, res) {
   res.json({ jws: req.jws, user: req.user });
 });
 ```
+
+There are a variety of standard options, which you can read about in
+[the OIDC spec](https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims),
+as well as your own custom "claims" as provided by you in `getClaims`.
 
 ```txt
 req.user    - the same as req.jws.claims, which include what you passed back
@@ -236,6 +252,9 @@ req.user    - the same as req.jws.claims, which include what you passed back
                 exp: 1622849600, // seconds since unix epoch
                 //
                 // + whatever you passed back in 'claims' for this token type
+                //
+                // Although claims is arbitrary, there is a set of Standard Claims:
+                // https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims
                 //
               }
 
@@ -268,6 +287,11 @@ xxd -l16 -ps /dev/urandom
 ```
 
 Create a private key:
+
+```bash
+curl https://webinstall.dev/keypairs | bash
+keypairs gen --key key.jwk.json --pub pub.jwk.json
+```
 
 ```bash
 #!/bin/bash
