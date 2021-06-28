@@ -1,14 +1,14 @@
 {
   "name": "auth3000",
-  "version": "0.1.0",
-  "description": "Another of AJ's Auth libraries",
+  "version": "0.9.0",
+  "description": "Modern, OpenID Connect compatible authentication.",
   "main": "index.js",
   "files": [
     "lib"
   ],
   "scripts": {
-    "start": "node app.js",
-    "genenv": "node ./genenv.js",
+    "start": "node example/app.js",
+    "genenv": "node ./utils/genenv.js",
     "test": "bash ./test.sh"
   },
   "repository": {
@@ -23,7 +23,6 @@
   "homepage": "https://github.com/therootcompany/auth3000#readme",
   "dependencies": {
     "@root/async-router": "^1.0.8",
-    "@ryanburnette/authorization": "^4.0.0",
     "body-parser": "^1.19.0",
     "cookie-parser": "^1.4.5",
     "dotenv": "^10.0.0",
@@ -34,6 +33,7 @@
   },
   "devDependencies": {
     "@root/request": "^1.7.0",
+    "@ryanburnette/authorization": "^4.0.0",
     "axios": "^0.21.1",
     "colors": "^1.4.0"
   }

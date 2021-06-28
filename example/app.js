@@ -8,7 +8,7 @@ async function main() {
   let express = require("express");
   let app = require("@root/async-router").Router();
 
-  let authenticate = require("./middleware/");
+  let authenticate = require("../middleware/");
   let issuer = process.env.BASE_URL || `http://localhost:${process.env.PORT}`;
 
   let DB = require("./db.js");
@@ -113,7 +113,7 @@ async function getUserByPassword(req) {
   async function notify(req) {
     let { type, value, secret, id } = req.authn;
     let request = require("@root/request");
-    let rnd = require("./lib/rnd.js");
+    let rnd = require("../lib/rnd.js");
 
     if (!process.env.SEND_EMAIL && "DEVELOPMENT" === process.env.ENV) {
       console.debug("[DEV] skipping email send");
@@ -186,7 +186,7 @@ async function getUserByPassword(req) {
     },
   };
 
-  let sessionMiddleware = require("./")(
+  let sessionMiddleware = require("../")(
     issuer,
     process.env.PRIVATE_KEY,
     // TODO is a default getClaims even possible?
