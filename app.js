@@ -47,7 +47,10 @@ async function main() {
         first_name: user.first_name,
         // these are authz things (for an access token), but for the demo...
         //account_id: user.account_id,
-        //roles: user.roles,
+      },
+      id_claims: {},
+      access_claims: {
+        roles: user.roles,
       },
     };
   }
@@ -225,6 +228,7 @@ async function getUserByPassword(req) {
   //
   let bodyParser = require("body-parser");
   app.use("/api", bodyParser.json({ limit: "100kb" }));
+  app.use("/api", authenticate({ iss: issuer, optional: true }));
   app.use("/api", function (req, res, next) {
     if (!req.user) {
       // TODO bad idea
@@ -238,7 +242,6 @@ async function getUserByPassword(req) {
     }
     next();
   });
-  app.use("/api", authenticate({ iss: issuer, optional: true }));
   if ("DEVELOPMENT" === process.env.ENV) {
     app.use("/api/debug/inspect", function (req, res) {
       res.json({ success: true, user: req.user || null });
