@@ -21,9 +21,9 @@ sessionMiddleware.challenge({ notify, store });
 sessionMiddleware.credentials();
 
 // /api/authn/{session,refresh,exchange,challenge,logout}
-app.use("/api/authn", sessionMiddleware.router());
+app.use("/api/authn", await sessionMiddleware.router());
 // /.well-known/openid-configuration
-app.use("/", sessionMiddleware.wellKnown());
+app.use("/", await sessionMiddleware.wellKnown());
 ```
 
 ```js
@@ -108,11 +108,11 @@ sessionMiddleware.credentials();
 sessionMiddleware.options({ secret: secret, authnParam: "authn" });
 
 // /api/authn/{session,refresh,exchange,challenge,logout}
-app.use("/api/authn", sessionMiddleware.router());
+app.use("/api/authn", await sessionMiddleware.router());
 
 // /.well-known/openid-configuration
 // /.well-known/jwks.json
-app.use("/", sessionMiddleware.wellKnown());
+app.use("/", await sessionMiddleware.wellKnown());
 
 //
 // Securing the API with ID & Access Tokens
@@ -140,10 +140,32 @@ app.use("/api/hello", function (req, res) {
 
 ```js
 let Auth3000 = require("auth3000");
-let sessionMiddleware = Auth3000(issuer, secret, privkey, {
-  oidc: { google: { clientId: "xxxx" } },
-  getClaims,
-});
+
+let sessionMiddleware = Auth3000(issuer privkey, getClaims);
+
+sessionMiddleware.oidc({ google: { clientId: "xxxx" } });
+sessionMiddleware.challenge({ notify, store });
+sessionMiddleware.credentials();
+
+await sessionMiddleware.router();
+await sessionMiddleware.wellKnown();
+```
+
+### store (for Verification)
+
+The store is a simple Key/Value store. You could use any database, a file, or
+use the default (in-memory) if you're developing locally.
+
+```js
+// The store keeps track of state information for the
+// challenge verification. The values are intended to
+// be opaque.
+
+// `key`   - a string identifier
+// `value` - a JSON object (you should stringify this)
+await store.set(key, value);
+
+await store.get(key);
 ```
 
 ### notify (for Verification)
