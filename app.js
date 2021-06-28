@@ -30,10 +30,12 @@ async function main() {
       ppid: ppid,
       id: jws && jws.claims.sub,
     });
-    if (req.body && req.body.password) {
+    if (req.body.pass) {
       if ("DEVELOPMENT" !== process.env.ENV) {
         throw new Error("creds not implemented");
       }
+      // TODO: check password
+      // (for right now, for testing, we'll just let it slide)
     }
     if (!user) {
       throw new Error("TODO_NOT_FOUND");
@@ -223,6 +225,19 @@ async function getUserByPassword(req) {
   //
   let bodyParser = require("body-parser");
   app.use("/api", bodyParser.json({ limit: "100kb" }));
+  app.use("/api", function (req, res, next) {
+    if (!req.user) {
+      // TODO bad idea
+      req.user = {};
+    }
+    if (!req.user.roles) {
+      req.user.roles = [];
+      if (req.user.role) {
+        req.user.roles.push(req.user.role);
+      }
+    }
+    next();
+  });
   app.use("/api", authenticate({ iss: issuer, optional: true }));
   if ("DEVELOPMENT" === process.env.ENV) {
     app.use("/api/debug/inspect", function (req, res) {

@@ -23,7 +23,7 @@
   "homepage": "https://github.com/therootcompany/auth3000#readme",
   "dependencies": {
     "@root/async-router": "^1.0.8",
-    "@ryanburnette/authorization": "^3.0.0",
+    "@ryanburnette/authorization": "^4.0.0",
     "body-parser": "^1.19.0",
     "cookie-parser": "^1.4.5",
     "dotenv": "^10.0.0",
