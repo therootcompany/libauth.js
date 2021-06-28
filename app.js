@@ -183,17 +183,22 @@ async function getUserByPassword(req) {
 
   let sessionMiddleware = require("./")(
     issuer,
-    process.env.HMAC_SECRET || process.env.COOKIE_SECRET,
     process.env.PRIVATE_KEY,
-    {
-      // TODO is a default getClaims even possible?
-      getClaims,
-      // TODO default development notify
-      notify: notify,
-      store: store,
-      oidc: { google: { clientId: process.env.GOOGLE_CLIENT_ID } },
-    }
+    // TODO is a default getClaims even possible?
+    getClaims
   );
+
+  sessionMiddleware.options({
+    //secret: process.env.HMAC_SECRET || process.env.COOKIE_SECRET,
+  });
+  sessionMiddleware.oidc({
+    google: { clientId: process.env.GOOGLE_CLIENT_ID },
+  });
+  sessionMiddleware.challenge({
+    notify: notify,
+    store: store,
+  });
+  sessionMiddleware.router();
 
   function greet(req, res) {
     return { message: "Hello, World!" };
@@ -208,10 +213,10 @@ async function getUserByPassword(req) {
   app.get("/hello", greet);
   // TODO is one of refresh,exchange redundant?
   // /api/authn/{session,refresh,exchange,challenge,logout}
-  app.use("/api/authn", sessionMiddleware);
+  app.use("/api/authn", await sessionMiddleware.router());
   // /.well-known/openid-configuration
   // /.well-known/jwks.json
-  app.use("/", sessionMiddleware.wellKnown);
+  app.use("/", sessionMiddleware.wellKnown());
 
   //
   // API Middleware & Handlers
