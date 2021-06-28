@@ -25,7 +25,7 @@ echo 'User Credentials: Expecting cookies and id_token'
 curl -fsSL -X POST http://localhost:"${PORT}"/api/authn/session \
     -b cookies.jar -c cookies.jar \
     -H "Content-Type: application/json" \
-    -d '{ "user": "coolaj86@gmail.com" }'
+    -d '{ "user": "coolaj86@gmail.com", "pass": "secret123" }'
 echo ''
 
 # Should give error
