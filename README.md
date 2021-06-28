@@ -5,8 +5,10 @@
 ```js
 // Authenticate Users
 let Auth3000 = require("auth3000");
-let sessionMiddleware = Auth3000(issuer, privkey, function (req) {
-  let { strategy, email, iss, ppid } = req.authn;
+let issuer = "http://localhost:3000";
+let privkey = "./key.jwk.json";
+let sessionMiddleware = Auth3000(issuer, privkey, async function (req) {
+  let { strategy, email, iss, ppid, oidc_claims } = req.authn;
 
   switch (strategy) {
     case "oidc":
@@ -66,45 +68,52 @@ If you want to see all 40+ hours of painstaking coding... here ya go:
 # Usage
 
 ```js
+// your base url
 let issuer = "http://localhost:3000";
-let secret = crypto.randomBytes(16).toString("base64");
-let privkey = fs.readFileSync("privkey.jwk.json", "utf8"); // or privkey.pem
+// jwk or pem file, or jwk object
+let privkey = fs.readFileSync("privkey.jwk.json", "utf8");
 
-let sessionMiddleware = require("auth3000")(issuer, privkey, function (req) {
-  let { strategy, email } = req.authn;
-  let idClaims;
-  let accessClaims;
+let sessionMiddleware = require("auth3000")(
+  issuer,
+  privkey,
+  async function (req) {
+    let { strategy, email } = req.authn;
+    let idClaims;
+    let accessClaims;
 
-  switch (strategy) {
-    case "oidc":
-      idClaims = await Users.find({ email: email, iss: iss, ppid: ppid });
-      break;
-    case "credentials":
-      idClaims = await Users.findAndVerifyPassword({
-        user: req.body.user,
-        pass: req.body.pass,
-      });
-      break;
-    case "challenge":
-      idClaims = await Users.find({ email: email });
-      break;
-    default:
-      throw new Error("unsupported login strategy");
+    switch (strategy) {
+      case "oidc":
+        idClaims = await Users.find({ email: email, iss: iss, ppid: ppid });
+        break;
+      case "credentials":
+        idClaims = await Users.findAndVerifyPassword({
+          user: req.body.user,
+          pass: req.body.pass,
+        });
+        break;
+      case "challenge":
+        idClaims = await Users.find({ email: email });
+        break;
+      default:
+        throw new Error("unsupported login strategy");
+    }
+
+    let { sub = "user_id", familiar_name = "Demo User" } = idClaims;
+    let { role = "user" } = await User.getRole({ user_id: sub });
+
+    // You can return a simple id_token (just profile info, no privileges)
+    // or an access_token (including roles, permissions, etc)
+    return {
+      id_claims: { sub, familiar_name },
+      access_claims: { sub, role },
+    };
   }
-
-  let { sub = "user_id", familiar_name = "Demo User" } = idClaims;
-  let { role = "user" } = await User.getRole({ user_id: sub });
-
-  // You can return a simple id_token (just profile info, no privileges)
-  // or an access_token (including roles, permissions, etc)
-  return {
-    id_claims: { sub, familiar_name },
-    access_claims: { sub, role },
-  };
-});
+);
 sessionMiddleware.oidc({ google: { clientId: "xxxx" } });
 sessionMiddleware.challenge({ notify, store });
 sessionMiddleware.credentials();
+// the private key will be used if secret is not provided
+let secret = crypto.randomBytes(16).toString("base64");
 sessionMiddleware.options({ secret: secret, authnParam: "authn" });
 
 // /api/authn/{session,refresh,exchange,challenge,logout}
@@ -151,6 +160,109 @@ await sessionMiddleware.router();
 await sessionMiddleware.wellKnown();
 ```
 
+```js
+function getClaims(req) {
+  let { strategy, email, iss, ppid } = req.authn;
+
+  return {
+    claims: { sub: "<user-id>" },
+    id_claims: { nickname: "<display-name>" },
+    access_claims: { role: "<optional-role>" },
+    refresh_claims: {
+      /*overrides*/
+    },
+  };
+}
+```
+
+```txt
+req.authn     - holds all strategy-specific data
+
+strategy      - the name of the authentication method
+                (each strategy receives different arguments)
+
+  - oidc        - 3rd party login via OAuth / OpenID Connect
+                  ex: Google Sign In, Facebook Connect, etc
+                Uses: { email, iss, ppid, oidc_claims } = req.authn
+                Sends: Set-Cookie (refresh_token), id_token
+
+  - challenge   - send a secret to the user (via email or phone)
+                  and ask them to enter it, or click a link
+                  a.k.a. Magic Link, Verification Code, etc
+                Uses: req.body
+                Sends: Set-Cookie (refresh_token), id_token
+
+  - credentials - get (typically) a username & password  from
+                  the user and validate it on your end
+                Uses: { email, phone } = req.authn
+                Sends: Set-Cookie (refresh_token), id_token
+
+  - exchange    - exchange an ID token for an access token
+                Uses: req.body, { jws } = req.authn
+                Sends: access_token
+
+  - refresh     - exchange a Cookie with a Refresh Token for an
+                  id and/or access token
+                Uses: req.body, { jws } = req.authn
+                Sends: id_token
+
+
+email         - a verified email address
+                ex: john@example.com
+              Provided by: oidc, challenge
+
+iss           - the base url of an issuer
+                (where `.well-known/openid-configuration` is found)
+                ex: https://example.com
+              Provided by: oidc, challenge
+
+ppid          - a pairwise id for the user, specific to your oidc client id
+                ex: xxxxxxxx
+              Provided by: oidc
+
+oidc_claims   - these are the claims present on the oidc provider's token -
+                they may be standard claims such as `nickname`, `gender`,
+                and `picture`, etc, or bespoke custom values specific to
+                that provider.
+                ex: { nickname: "AJ", picture: "https://example.com/aj.jpg" }
+              Provided by: oidc
+
+jws           - a verified, decoded jwt with headers, claims, and signature
+                (from the refresh cookie or Authorization: Bearer)
+              Provided by: exchange, refresh
+
+req.body      - whatever you send in - completely up to you how to use it
+```
+
+What you return defines which tokens will be sent
+
+```txt
+claims          - defaults that apply to any granted tokens, which will be over-
+                  written by other values
+
+id_claims       - will cause an ID Token to be granted with the contained claims
+
+access_claims   - will cause an Access Token to be granted with the contained claims
+
+refresh_claims  - IF a refresh token NOT USED, except for on the will cause an Access Token to be granted with the contained claims
+
+Common claims include:
+
+  - sub           - Subject. The ppid or id of the user, bot, or bearer of the token.
+
+  - exp           - Human readable expiry age, such as '300s', '60m', '12h', or '30d',
+                    which can be used to extend or shorten the life of each token
+                    indvidually.
+
+  - jti           - A (random) identifier for the token, useful for revoking tokens.
+
+  - nickname      - A display name for the user.
+
+  - role(s)       - A group such as 'admin' or 'owner' to enable broad permissions without
+    non-standard    looking up the permissions of the individual user.
+    access-only
+```
+
 ### store (for Verification)
 
 The store is a simple Key/Value store. You could use any database, a file, or
@@ -179,7 +291,7 @@ The notify function is intended to be used for:
 
 ```js
 function notify(req) {
-  let { type, value, secret, id, issuer, jws, issuer } = req.authn;
+  let { type, value, secret, id, jws, issuer } = req.authn;
 
   // What you should do:
   //
