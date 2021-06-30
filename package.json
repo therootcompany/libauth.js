@@ -3,9 +3,7 @@
   "version": "0.9.0",
   "description": "Modern, OpenID Connect compatible authentication.",
   "main": "index.js",
-  "files": [
-    "lib"
-  ],
+  "files": ["lib", "middleware"],
   "scripts": {
     "start": "node example/app.js",
     "genenv": "node ./utils/genenv.js",

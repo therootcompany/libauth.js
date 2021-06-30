@@ -5,7 +5,9 @@
 ```js
 // Authenticate Users
 let Auth3000 = require("auth3000");
-let sessionMiddleware = Auth3000(issuer, privkey, function (req) {
+let issuer = "http://localhost:3000";
+let privkey = "./key.jwk.json";
+let sessionMiddleware = Auth3000(issuer, privkey, async function (req) {
   let { strategy, email, iss, ppid, oidc_claims } = req.authn;
 
   switch (strategy) {
@@ -66,45 +68,52 @@ If you want to see all 40+ hours of painstaking coding... here ya go:
 # Usage
 
 ```js
+// your base url
 let issuer = "http://localhost:3000";
-let secret = crypto.randomBytes(16).toString("base64");
-let privkey = fs.readFileSync("privkey.jwk.json", "utf8"); // or privkey.pem
+// jwk or pem file, or jwk object
+let privkey = fs.readFileSync("privkey.jwk.json", "utf8");
 
-let sessionMiddleware = require("auth3000")(issuer, privkey, function (req) {
-  let { strategy, email } = req.authn;
-  let idClaims;
-  let accessClaims;
+let sessionMiddleware = require("auth3000")(
+  issuer,
+  privkey,
+  async function (req) {
+    let { strategy, email } = req.authn;
+    let idClaims;
+    let accessClaims;
 
-  switch (strategy) {
-    case "oidc":
-      idClaims = await Users.find({ email: email, iss: iss, ppid: ppid });
-      break;
-    case "credentials":
-      idClaims = await Users.findAndVerifyPassword({
-        user: req.body.user,
-        pass: req.body.pass,
-      });
-      break;
-    case "challenge":
-      idClaims = await Users.find({ email: email });
-      break;
-    default:
-      throw new Error("unsupported login strategy");
+    switch (strategy) {
+      case "oidc":
+        idClaims = await Users.find({ email: email, iss: iss, ppid: ppid });
+        break;
+      case "credentials":
+        idClaims = await Users.findAndVerifyPassword({
+          user: req.body.user,
+          pass: req.body.pass,
+        });
+        break;
+      case "challenge":
+        idClaims = await Users.find({ email: email });
+        break;
+      default:
+        throw new Error("unsupported login strategy");
+    }
+
+    let { sub = "user_id", familiar_name = "Demo User" } = idClaims;
+    let { role = "user" } = await User.getRole({ user_id: sub });
+
+    // You can return a simple id_token (just profile info, no privileges)
+    // or an access_token (including roles, permissions, etc)
+    return {
+      id_claims: { sub, familiar_name },
+      access_claims: { sub, role },
+    };
   }
-
-  let { sub = "user_id", familiar_name = "Demo User" } = idClaims;
-  let { role = "user" } = await User.getRole({ user_id: sub });
-
-  // You can return a simple id_token (just profile info, no privileges)
-  // or an access_token (including roles, permissions, etc)
-  return {
-    id_claims: { sub, familiar_name },
-    access_claims: { sub, role },
-  };
-});
+);
 sessionMiddleware.oidc({ google: { clientId: "xxxx" } });
 sessionMiddleware.challenge({ notify, store });
 sessionMiddleware.credentials();
+// the private key will be used if secret is not provided
+let secret = crypto.randomBytes(16).toString("base64");
 sessionMiddleware.options({ secret: secret, authnParam: "authn" });
 
 // /api/authn/{session,refresh,exchange,challenge,logout}
@@ -282,7 +291,7 @@ The notify function is intended to be used for:
 
 ```js
 function notify(req) {
-  let { type, value, secret, id, issuer, jws, issuer } = req.authn;
+  let { type, value, secret, id, jws, issuer } = req.authn;
 
   // What you should do:
   //
