@@ -1,9 +1,12 @@
 {
   "name": "auth3000",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Modern, OpenID Connect compatible authentication.",
   "main": "index.js",
-  "files": ["lib", "middleware"],
+  "files": [
+    "lib",
+    "middleware"
+  ],
   "scripts": {
     "start": "node example/app.js",
     "genenv": "node ./utils/genenv.js",
