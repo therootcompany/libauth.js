@@ -325,7 +325,7 @@ async function getUserByPassword(req) {
   // Dev / Localhost Local File Server
   if ("DEVELOPMENT" === process.env.ENV) {
     let path = require("path");
-    app.use("/", express.static(path.join(__dirname, "public")));
+    app.use("/", express.static(path.join(__dirname, "../public")));
   }
 
   //
