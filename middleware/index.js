@@ -22,13 +22,18 @@ module.exports = function authMiddleware({
       return;
     }
 
-    req[jwsParam] = await Keyfetch.jwt.verify(jwt, {
-      jwk: pub,
-      issuers: [iss],
-    });
-    if (userParam) {
-      req[userParam] = req[jwsParam].claims;
-    }
-    next();
+    await Keyfetch.jwt
+      .verify(jwt, {
+        jwk: pub,
+        issuers: [iss],
+      })
+      .then(function (jws) {
+        req[jwsParam] = jws;
+        if (userParam) {
+          req[userParam] = req[jwsParam].claims;
+        }
+        next();
+      })
+      .catch(next);
   };
 };
