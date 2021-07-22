@@ -11,7 +11,12 @@ module.exports = function authMiddleware({
   jwsParam = "jws",
 }) {
   return async function (req, res, next) {
-    let jwt = (req.headers.authorization || "").replace("Bearer ", "");
+    let parts = (req.headers.authorization || "").split(" ");
+    let jwt = parts[1];
+    if ("Bearer" !== parts[0] || parts[2]) {
+      next(E.WRONG_TOKEN_TYPE());
+      return;
+    }
     if (!jwt) {
       if (optional) {
         next();
@@ -34,6 +39,10 @@ module.exports = function authMiddleware({
         }
         next();
       })
-      .catch(next);
+      .catch(function (err) {
+        let err2 = E.INVALID_TOKEN();
+        err2._original = err;
+        throw err;
+      });
   };
 };
