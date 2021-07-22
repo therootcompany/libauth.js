@@ -145,6 +145,19 @@ app.use("/api/hello", function (req, res) {
 
 # Node API
 
+## Errors
+
+| Name                         | Status | Message (truncated)                              |
+| ---------------------------- | ------ | ------------------------------------------------ |
+| E_INVALID_CODE               | 400    | That verification code isn't valid. It might ... |
+| E_UNVERIFIED_OIDC_IDENTIFIER | 400    | You cannot use the identifier associated with... |
+| E_SUSPICIOUS_REQUEST         | 400    | Something suspicious is going on - as if ther... |
+| E_SUSPICIOUS_TOKEN           | 400    | Something suspicious is going on - the given ... |
+| E_INVALID_SESSION            | 400    | Missing or invalid cookie session. Please log... |
+| E_DEVELOPER_ERROR            | 422    | Oops! One of the programmers made a mistake. ... |
+| " -> WRONG_TOKEN_TYPE        | 422    | the HTTP Authorization was not given in a sup... |
+| " -> MISSING_TOKEN           | 401    | the required authorization token was not prov... |
+
 ## Authentication (Issuer) Middleware
 
 ```js
