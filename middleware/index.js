@@ -41,8 +41,8 @@ module.exports = function authMiddleware({
         next();
       })
       .catch(function (err) {
-        let err2 = E.INVALID_TOKEN();
-        err2._original = err;
+        //let err2 = E.INVALID_TOKEN();
+        //err2._original = err;
         next(err);
       });
   };
