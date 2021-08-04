@@ -767,7 +767,7 @@ Response
 {
   "success": true,
   "status": "valid",
-  "id_token": "xxxx.yyyy.zzzz"
+  "id_token": "xxxx.yyyy.zzzz",
   "access_token": "xxx2.yyy2.zzz2"
 }
 ```
