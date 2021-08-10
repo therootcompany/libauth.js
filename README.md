@@ -18,6 +18,7 @@ let sessionMiddleware = Auth3000(issuer, privkey, async function (req) {
       throw new Error("unsupported auth strategy");
   }
 });
+sessionMiddleware.options({ DEVELOPMENT: false });
 sessionMiddleware.oidc({ google: { clientId: "xxxx" } });
 sessionMiddleware.challenge({ notify, store });
 sessionMiddleware.credentials();
@@ -50,12 +51,13 @@ app.use("/api/hello", function (req, res) {
 Handling the following strategies:
 
 - [x] `oidc` - ex: Facebook Connect, Google Sign In, Microsoft Live
-- [x] `credentials` - bespoke, specified by you (probably username/password)
+- [x] `credentials` - bespoke, specified by you
+  - [x] Username / Password
+  - [x] API Key
 - [x] `challenge` - a.k.a. "verification email" or "Magic Link" ( or SMS code)
 - [x] `refresh` - to refresh an `id_token` via refresh token cookie
-- [ ] `jwt` - to exchange an `id_token` for an `access_token`
-- [ ] `exchange`
-- [ ] `apikey`
+- [x] `exchange` - to exchange an `id_token` for an `access_token`
+  - [x] JWK
 
 ### Live Code Project
 
@@ -168,6 +170,11 @@ let sessionMiddleware = Auth3000(issuer privkey, getClaims);
 sessionMiddleware.oidc({ google: { clientId: "xxxx" } });
 sessionMiddleware.challenge({ notify, store });
 sessionMiddleware.credentials();
+
+sessionMiddleware.logout(function (req) {
+  let jti = req.authn.jws.claims.jti;
+  // invalidate server-side session
+});
 
 await sessionMiddleware.router();
 await sessionMiddleware.wellKnown();
