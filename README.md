@@ -159,16 +159,19 @@ async function authHandler(req) {
       throw new Error("unsupported login strategy");
   }
   
-  // store jti in database with non-revoked status
-
-  let { sub = "user_id", familiar_name = "Demo User" } = idClaims;
+  if (idClaims) {
+    await db.AuditLog.insert({ user_id: idClaims.user_id, jti, created_at: Date.now() });
+    await db.Session.insert({ jti, revoked_at: null });
+  }
   let { role = "user" } = await User.getRole({ user_id: sub });
 
   // You can return a simple id_token (just profile info, no privileges)
   // or an access_token (including roles, permissions, etc)
+  // 'sub' is "subject" a.k.a. user_id
+  // 'jti' is the token id
   return {
-    claims: { jti, sub },
-    id_claims: { familiar_name },
+    claims: { jti, sub: idClaims.user_id },
+    id_claims: { familiar_name: idClaims.familiar_name },
     access_claims: { role },
   };
 }
