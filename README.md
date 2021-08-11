@@ -82,7 +82,8 @@ let sessionMiddleware = require("auth3000")(
     let { strategy, email } = req.authn;
     let idClaims;
     let accessClaims;
-
+    let jti = crypto.randomBytes(16).toString('base64');
+    
     switch (strategy) {
       case "oidc":
         idClaims = await Users.find({ email: email, iss: iss, ppid: ppid });
@@ -96,9 +97,14 @@ let sessionMiddleware = require("auth3000")(
       case "challenge":
         idClaims = await Users.find({ email: email });
         break;
+      case "refresh":
+      case "exchange":
+        // check that the given session (jti) is still valid ...
       default:
         throw new Error("unsupported login strategy");
     }
+    
+    // store jti in database with non-revoked status
 
     let { sub = "user_id", familiar_name = "Demo User" } = idClaims;
     let { role = "user" } = await User.getRole({ user_id: sub });
@@ -106,17 +112,23 @@ let sessionMiddleware = require("auth3000")(
     // You can return a simple id_token (just profile info, no privileges)
     // or an access_token (including roles, permissions, etc)
     return {
-      id_claims: { sub, familiar_name },
-      access_claims: { sub, role },
+      claims: { jti, sub },
+      id_claims: { familiar_name },
+      access_claims: { role },
     };
   }
 );
-sessionMiddleware.oidc({ google: { clientId: "xxxx" } });
-sessionMiddleware.challenge({ notify, store });
-sessionMiddleware.credentials();
+
 // the private key will be used if secret is not provided
 let secret = crypto.randomBytes(16).toString("base64");
 sessionMiddleware.options({ secret: secret, authnParam: "authn" });
+sessionMiddleware.oidc({ google: { clientId: "xxxx" } });
+sessionMiddleware.challenge({ notify, store });
+sessionMiddleware.credentials();
+sessionMiddleware.logout(function (req) {
+  let jti = req.authn.jwt.claims.jti;
+  // revoke any sessions matching this jti
+});
 
 // /api/authn/{session,refresh,exchange,challenge,logout}
 app.use("/api/authn", await sessionMiddleware.router());
