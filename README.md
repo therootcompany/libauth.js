@@ -69,55 +69,15 @@ If you want to see all 40+ hours of painstaking coding... here ya go:
 
 # Usage
 
+Here's the basic boilerplate:
+
 ```js
 // your base url
 let issuer = "http://localhost:3000";
 // jwk or pem file, or jwk object
 let privkey = fs.readFileSync("privkey.jwk.json", "utf8");
 
-let sessionMiddleware = require("auth3000")(
-  issuer,
-  privkey,
-  async function (req) {
-    let { strategy, email } = req.authn;
-    let idClaims;
-    let accessClaims;
-    let jti = crypto.randomBytes(16).toString('base64');
-    
-    switch (strategy) {
-      case "oidc":
-        idClaims = await Users.find({ email: email, iss: iss, ppid: ppid });
-        break;
-      case "credentials":
-        idClaims = await Users.findAndVerifyPassword({
-          user: req.body.user,
-          pass: req.body.pass,
-        });
-        break;
-      case "challenge":
-        idClaims = await Users.find({ email: email });
-        break;
-      case "refresh":
-      case "exchange":
-        // check that the given session (jti) is still valid ...
-      default:
-        throw new Error("unsupported login strategy");
-    }
-    
-    // store jti in database with non-revoked status
-
-    let { sub = "user_id", familiar_name = "Demo User" } = idClaims;
-    let { role = "user" } = await User.getRole({ user_id: sub });
-
-    // You can return a simple id_token (just profile info, no privileges)
-    // or an access_token (including roles, permissions, etc)
-    return {
-      claims: { jti, sub },
-      id_claims: { familiar_name },
-      access_claims: { role },
-    };
-  }
-);
+let sessionMiddleware = require("auth3000")(issuer, privkey, authHandler);
 
 // the private key will be used if secret is not provided
 let secret = crypto.randomBytes(16).toString("base64");
@@ -155,6 +115,63 @@ app.use("/api/hello", function (req, res) {
 
   res.json({ message: "hello" });
 });
+```
+
+The `authHandler` is where you do the real decision-making -
+You decide how to handle the various authentication strategies,
+and how to use interpret the `req` object.
+
+```js
+async function authHandler(req) {
+  let { strategy, email } = req.authn;
+  let idClaims;
+  let accessClaims;
+  let jti = crypto.randomBytes(16).toString('base64');
+  let session;
+  let user;
+  let jws;
+  
+  switch (strategy) {
+    case "oidc":
+      idClaims = await Users.find({ email: email, iss: iss, ppid: ppid });
+      break;
+    case "credentials":
+      // you could also handle an API key here
+      idClaims = await Users.findAndVerifyPassword({
+        user: req.body.user,
+        pass: req.body.pass,
+      });
+      break;
+    case "challenge":
+      idClaims = await Users.find({ email: email });
+      break;
+    case "refresh":
+      // jws refers to the signed jwt cookie
+      session = await db.Session.find({ id: req.authn.jws.claims.jti, revoked_at: null });
+      if (!session) { throw new Error('revoked auth'); }
+      user = await db.User.find({ id: req.authn.jws.claims.sub });
+      break;
+    case "exchange":
+      // jws refers to the id_token
+      user = await db.User.find({ id: req.authn.jws.claims.sub });
+      break;
+    default:
+      throw new Error("unsupported login strategy");
+  }
+  
+  // store jti in database with non-revoked status
+
+  let { sub = "user_id", familiar_name = "Demo User" } = idClaims;
+  let { role = "user" } = await User.getRole({ user_id: sub });
+
+  // You can return a simple id_token (just profile info, no privileges)
+  // or an access_token (including roles, permissions, etc)
+  return {
+    claims: { jti, sub },
+    id_claims: { familiar_name },
+    access_claims: { role },
+  };
+}
 ```
 
 # Node API
