@@ -85,10 +85,7 @@ sessionMiddleware.options({ secret: secret, authnParam: "authn" });
 sessionMiddleware.oidc({ google: { clientId: "xxxx" } });
 sessionMiddleware.challenge({ notify, store });
 sessionMiddleware.credentials();
-sessionMiddleware.logout(function (req) {
-  let jti = req.authn.jwt.claims.jti;
-  // revoke any sessions matching this jti
-});
+sessionMiddleware.logout(revokeHandler);
 
 // /api/authn/{session,refresh,exchange,challenge,logout}
 app.use("/api/authn", await sessionMiddleware.router());
@@ -132,17 +129,17 @@ async function authHandler(req) {
   
   switch (strategy) {
     case "oidc":
-      idClaims = await Users.find({ email: email, iss: iss, ppid: ppid });
+      idClaims = await db.Users.find({ email: email, iss: iss, ppid: ppid });
       break;
     case "credentials":
       // you could also handle an API key here
-      idClaims = await Users.findAndVerifyPassword({
+      idClaims = await db.Users.findAndVerifyPassword({
         user: req.body.user,
         pass: req.body.pass,
       });
       break;
     case "challenge":
-      idClaims = await Users.find({ email: email });
+      idClaims = await db.Users.find({ email: email });
       break;
     case "refresh":
       // jws refers to the signed jwt cookie
@@ -173,6 +170,12 @@ async function authHandler(req) {
     id_claims: { familiar_name: idClaims.familiar_name },
     access_claims: { role },
   };
+}
+
+function revokeHandler(req) {
+  let jti = req.authn.jwt.claims.jti;
+  // revoke any sessions matching this jti
+  db.Session.patch({ id: jti, revoked_at: Date.now() });
 }
 ```
 
