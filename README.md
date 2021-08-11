@@ -22,6 +22,9 @@ sessionMiddleware.options({ DEVELOPMENT: false });
 sessionMiddleware.oidc({ google: { clientId: "xxxx" } });
 sessionMiddleware.challenge({ notify, store });
 sessionMiddleware.credentials();
+sessionMiddleware.logout(function (req) {
+  // revoke the old session
+});
 
 // /api/authn/{session,refresh,exchange,challenge,logout}
 app.use("/api/authn", await sessionMiddleware.router());
