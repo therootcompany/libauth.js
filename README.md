@@ -115,13 +115,12 @@ app.use("/api/hello", function (req, res) {
 
   res.json({ message: "hello" });
 });
-```
 
-The `authHandler` is where you do the real decision-making -
-You decide how to handle the various authentication strategies,
-and how to use interpret the `req` object.
 
-```js
+// The `authHandler` is where you do the real decision-making -
+// You decide how to handle the various authentication strategies,
+// and how to use interpret the `req` object.
+
 async function authHandler(req) {
   let { strategy, email } = req.authn;
   let idClaims;
