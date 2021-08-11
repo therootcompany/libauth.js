@@ -1,6 +1,6 @@
 {
   "name": "auth3000",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "Modern, OpenID Connect compatible authentication.",
   "main": "index.js",
   "files": [
