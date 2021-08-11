@@ -6,8 +6,10 @@
 // Authenticate Users
 let Auth3000 = require("auth3000");
 let issuer = "http://localhost:3000";
-let privkey = "./key.jwk.json";
-let sessionMiddleware = Auth3000(issuer, privkey, async function (req) {
+let privkey = JSON.parse(fs.readFileSync("./key.jwk.json"));
+let sessionMiddleware = Auth3000(issuer, privkey, { DEVELOPMENT: false });
+
+sessionMiddleware.login(async function (req) {
   let { strategy, email, iss, ppid, oidc_claims } = req.authn;
 
   switch (strategy) {
@@ -18,18 +20,14 @@ let sessionMiddleware = Auth3000(issuer, privkey, async function (req) {
       throw new Error("unsupported auth strategy");
   }
 });
-sessionMiddleware.options({ DEVELOPMENT: false });
 sessionMiddleware.oidc({ google: { clientId: "xxxx" } });
 sessionMiddleware.challenge({ notify, store });
 sessionMiddleware.credentials();
-sessionMiddleware.logout(function (req) {
-  // revoke the old session
-});
 
 // /api/authn/{session,refresh,exchange,challenge,logout}
-app.use("/api/authn", await sessionMiddleware.router());
+app.use("/api/authn", sessionMiddleware.router());
 // /.well-known/openid-configuration
-app.use("/", await sessionMiddleware.wellKnown());
+app.use("/", sessionMiddleware.wellKnown());
 ```
 
 ```js
@@ -72,30 +70,54 @@ If you want to see all 40+ hours of painstaking coding... here ya go:
 
 # Usage
 
+You'll need a private key in JWK format. You can use
+[keypairs](https://webinstall.dev/keypairs) for that:
+
+```bash
+curl https://webinstall.dev/keypairs | bash
+keypairs gen --key key.jwk.json --pub pub.jwk.json
+```
+
 Here's the basic boilerplate:
 
 ```js
 // your base url
 let issuer = "http://localhost:3000";
-// jwk or pem file, or jwk object
-let privkey = fs.readFileSync("privkey.jwk.json", "utf8");
-
-let sessionMiddleware = require("auth3000")(issuer, privkey, authHandler);
+// jwk object (note: if you have a key in another format, see 'Converting PEM' below)
+let privkey = JSON.parse(fs.readFileSync("./privkey.jwk.json", "utf8"));
 
 // the private key will be used if secret is not provided
 let secret = crypto.randomBytes(16).toString("base64");
-sessionMiddleware.options({ secret: secret, authnParam: "authn" });
+let sessionMiddleware = require("auth3000")(issuer, privkey, {
+  DEVELOPMENT: false,
+  secret: secret,
+  authnParam: "authn",
+});
+
+// Login will issue (at least) an id_token, and set a refresh_token cookie
+sessionMiddleware.login(loginHandler);
+// load optional login strategies...
 sessionMiddleware.oidc({ google: { clientId: "xxxx" } });
 sessionMiddleware.challenge({ notify, store });
 sessionMiddleware.credentials();
-sessionMiddleware.logout(revokeHandler);
+
+// Refresh will re-issue an id_token
+sessionMiddleware.refresh(exchangeHandler);
+
+// Exchange will exchange an id_token for an access_token
+sessionMiddleware.exchange(exchangeHandler);
+
+// Logout will revoke the refresh_token
+// (this is an extra security feature to protect against scenarios in which
+// an attacker is able to get a copy of a cookie before a browser expires it)
+sessionMiddleware.logout(logoutHandler);
 
 // /api/authn/{session,refresh,exchange,challenge,logout}
-app.use("/api/authn", await sessionMiddleware.router());
+app.use("/api/authn", sessionMiddleware.router());
 
 // /.well-known/openid-configuration
 // /.well-known/jwks.json
-app.use("/", await sessionMiddleware.wellKnown());
+app.use("/", sessionMiddleware.wellKnown());
 
 //
 // Securing the API with ID & Access Tokens
@@ -116,69 +138,92 @@ app.use("/api/hello", function (req, res) {
   res.json({ message: "hello" });
 });
 
+// The various auth handlers are where you do the real decision-making.
+// You have full access to the `req` object to use as you see fit.
 
-// The `authHandler` is where you do the real decision-making -
-// You decide how to handle the various authentication strategies,
-// and how to use interpret the `req` object.
-
-async function authHandler(req) {
+async function loginHandler(req) {
   let { strategy, email } = req.authn;
   let idClaims;
-  let accessClaims;
-  let jti = crypto.randomBytes(16).toString('base64');
-  let session;
-  let user;
-  let jws;
-  
+
   switch (strategy) {
     case "oidc":
-      idClaims = await db.Users.find({ email: email, iss: iss, ppid: ppid });
+      idClaims = await db.User.find({ email: email, iss: iss, ppid: ppid });
       break;
     case "credentials":
       // you could also handle an API key here
-      idClaims = await db.Users.findAndVerifyPassword({
+      idClaims = await db.User.findAndVerifyPassword({
         user: req.body.user,
         pass: req.body.pass,
       });
       break;
     case "challenge":
-      idClaims = await db.Users.find({ email: email });
-      break;
-    case "refresh":
-      // jws refers to the signed jwt cookie
-      session = await db.Session.find({ id: req.authn.jws.claims.jti, revoked_at: null });
-      if (!session) { throw new Error('revoked auth'); }
-      user = await db.User.find({ id: req.authn.jws.claims.sub });
-      break;
-    case "exchange":
-      // jws refers to the id_token
-      user = await db.User.find({ id: req.authn.jws.claims.sub });
+      idClaims = await db.User.find({ email: email });
       break;
     default:
       throw new Error("unsupported login strategy");
   }
-  
-  if (idClaims) {
-    await db.AuditLog.insert({ user_id: idClaims.user_id, jti, created_at: Date.now() });
-    await db.Session.insert({ jti, revoked_at: null });
+  if (!idClaims) {
+    throw new Error("login failed");
   }
-  let { role = "user" } = await User.getRole({ user_id: sub });
+
+  let jti = crypto.randomBytes(16).toString("base64");
+  // this can also be used as an audit log
+  await db.Session.insert({ jti, revoked_at: null });
 
   // You can return a simple id_token (just profile info, no privileges)
-  // or an access_token (including roles, permissions, etc)
-  // 'sub' is "subject" a.k.a. user_id
-  // 'jti' is the token id
+  // or an access_token (including roles, permissions, etc), or both
+
+  let { role = "user" } = await db.Account.getRole({ user_id: sub });
   return {
+    // 'sub' is "subject" a.k.a. user_id
+    // 'jti' is the token id
     claims: { jti, sub: idClaims.user_id },
     id_claims: { familiar_name: idClaims.familiar_name },
     access_claims: { role },
   };
 }
 
-function revokeHandler(req) {
+async function exchangeHandler(req) {
+  // 'jws' refers to the signed jwt cookie
+  // 'jti' is the token id
+  let jti = req.authn.jws.claims.jti;
+
+  let session = await db.Session.find({ id: jti, revoked_at: null });
+  if (!session) {
+    throw new Error("revoked auth");
+  }
+
+  // 'sub' is "subject" a.k.a. user_id
+  let sub = req.authn.jws.claims.sub;
+  let user = await db.User.find({ id: sub });
+  let id_claims;
+  let access_claims;
+
+  switch (req.authn.strategy) {
+    case "refresh":
+      // Generally the 'refresh' is for id_tokens,
+      // but could also refresh other tokens here as well.
+      id_claims = { jti, sub, familiar_name: idClaims.familiar_name };
+      break;
+    case "exchange":
+      // Generally the 'exchange' is for access_tokens,
+      // but could also refresh other tokens here as well.
+      let { role = "user" } = await db.Account.getRole({ user_id: sub });
+      access_claims = { jti, role };
+      break;
+    default:
+      throw new Error("unsupported login strategy");
+  }
+
+  return { id_claims, access_claims };
+}
+
+// Note: this will be called whenever an id cookie is destroyed
+// (including when it is replaced by another login cookie)
+async function logoutHandler(req) {
   let jti = req.authn.jwt.claims.jti;
-  // revoke any sessions matching this jti
-  db.Session.patch({ id: jti, revoked_at: Date.now() });
+  // Revoke rather than delete to keep an audit trail
+  db.Session.patch({ id: jti, revoked_at: new Date() });
 }
 ```
 
@@ -202,7 +247,9 @@ function revokeHandler(req) {
 ```js
 let Auth3000 = require("auth3000");
 
-let sessionMiddleware = Auth3000(issuer privkey, getClaims);
+let sessionMiddleware = Auth3000(issuer privkey, {});
+
+sessionMiddleware.login(getClaims);
 
 sessionMiddleware.oidc({ google: { clientId: "xxxx" } });
 sessionMiddleware.challenge({ notify, store });
@@ -213,8 +260,8 @@ sessionMiddleware.logout(function (req) {
   // invalidate server-side session
 });
 
-await sessionMiddleware.router();
-await sessionMiddleware.wellKnown();
+sessionMiddleware.router();
+sessionMiddleware.wellKnown();
 ```
 
 ```js
@@ -349,6 +396,8 @@ The notify function is intended to be used for:
 ```js
 function notify(req) {
   let { type, value, secret, id, jws, issuer } = req.authn;
+  // type = "email"
+  // value = "john@example.com"
 
   // What you should do:
   //
@@ -481,6 +530,14 @@ Create a private key:
 ```bash
 curl https://webinstall.dev/keypairs | bash
 keypairs gen --key key.jwk.json --pub pub.jwk.json
+```
+
+Or for converting PEM keys, use
+[keypairs.js](https://www.npmjs.com/package/keypairs-cli):
+
+```bash
+npm install --global keypairs-cli
+keypairs ./privkey.pem
 ```
 
 ```bash
