@@ -233,7 +233,8 @@ async function logoutHandler(req) {
 
 | Name                         | Status | Message (truncated)                              |
 | ---------------------------- | ------ | ------------------------------------------------ |
-| E_INVALID_CODE               | 400    | That verification code isn't valid. It might ... |
+| E_CODE_RETRY                 | 400    | That verification code isn't correct. It migh... |
+| E_CODE_INVALID               | 400    | That verification code isn't valid. It might ... |
 | E_UNVERIFIED_OIDC_IDENTIFIER | 400    | You cannot use the identifier associated with... |
 | E_SUSPICIOUS_REQUEST         | 400    | Something suspicious is going on - as if ther... |
 | E_SUSPICIOUS_TOKEN           | 400    | Something suspicious is going on - the given ... |
