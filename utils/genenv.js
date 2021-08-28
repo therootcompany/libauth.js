@@ -10,7 +10,8 @@ if (!args.length) {
 }
 
 let fs = require("fs");
-let envjs = fs.readFileSync("./env.tpl.js", "utf8");
+let path = require("path");
+let envjs = fs.readFileSync(path.join(__dirname, "env.tpl.js"), "utf8");
 
 console.info("");
 Object.keys(process.env).forEach(function (envname) {
