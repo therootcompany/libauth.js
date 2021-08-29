@@ -21,6 +21,9 @@ sessionMiddleware.login(async function (req) {
   }
 });
 sessionMiddleware.oidc({ google: { clientId: "xxxx" } });
+sessionMiddleware.oauth2({
+  github: { clientId: "xxxx", clientSecret: "xxxx" },
+});
 sessionMiddleware.challenge({ notify, store });
 sessionMiddleware.credentials();
 
@@ -52,6 +55,7 @@ app.use("/api/hello", function (req, res) {
 Handling the following strategies:
 
 - [x] `oidc` - ex: Facebook Connect, Google Sign In, Microsoft Live
+- [x] `oauth2` - ex: GitHub Sign In
 - [x] `credentials` - bespoke, specified by you
   - [x] Username / Password
   - [x] API Key
@@ -146,8 +150,17 @@ async function loginHandler(req) {
   let idClaims;
 
   switch (strategy) {
+    case "oauth2":
+      {
+        let { iss, id } = req.authn;
+        idClaims = await db.User.find({ email: email, iss: iss, id: id });
+      }
+      break;
     case "oidc":
-      idClaims = await db.User.find({ email: email, iss: iss, ppid: ppid });
+      {
+        let { iss, ppid } = req.authn;
+        idClaims = await db.User.find({ email: email, iss: iss, ppid: ppid });
+      }
       break;
     case "credentials":
       // you could also handle an API key here
@@ -289,6 +302,11 @@ strategy      - the name of the authentication method
   - oidc        - 3rd party login via OAuth / OpenID Connect
                   ex: Google Sign In, Facebook Connect, etc
                 Uses: { email, iss, ppid, oidc_claims } = req.authn
+                Sends: Set-Cookie (refresh_token), id_token
+
+  - oauth2      - 3rd party login via OAuth2 (bespoke profile data)
+                  ex: GitHub
+                Uses: { email, iss, id, oauth_profile } = req.authn
                 Sends: Set-Cookie (refresh_token), id_token
 
   - challenge   - send a secret to the user (via email or phone)
