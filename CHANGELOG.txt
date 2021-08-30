@@ -1,0 +1,5 @@
+v0.13.2
+  - bugfix: use correct path for env.tpl.js
+  - feature: add OAuth2 support, specifically for 'github.com'
+  - refactor!: deprecate use of 'google' and 'google.com' in favor of
+	  accounts.google.com, which is the correct OIDC name
