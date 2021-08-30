@@ -175,8 +175,7 @@
 
   async function init() {
     $(".js-logout").hidden = true;
-    $(".js-google-oidc-url").hidden = true;
-    $(".js-github-oauth2-url").hidden = true;
+    $(".js-social-login").hidden = true;
 
     // TODO rename to google
     var googleSignInUrl = generateOidcUrl(
@@ -230,8 +229,7 @@
       return;
     }
 
-    $(".js-google-oidc-url").hidden = false;
-    $(".js-github-oauth2-url").hidden = false;
+    $(".js-social-login").hidden = false;
     return;
   }
 
