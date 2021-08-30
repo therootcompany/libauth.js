@@ -20,7 +20,7 @@ sessionMiddleware.login(async function (req) {
       throw new Error("unsupported auth strategy");
   }
 });
-sessionMiddleware.oidc({ google: { clientId: "xxxx" } });
+sessionMiddleware.oidc({ "accounts.google.com": { clientId: "xxxx" } });
 sessionMiddleware.oauth2({
   github: { clientId: "xxxx", clientSecret: "xxxx" },
 });
@@ -101,7 +101,10 @@ let sessionMiddleware = require("auth3000")(issuer, privkey, {
 // Login will issue (at least) an id_token, and set a refresh_token cookie
 sessionMiddleware.login(loginHandler);
 // load optional login strategies...
-sessionMiddleware.oidc({ google: { clientId: "xxxx" } });
+sessionMiddleware.oidc({ "accounts.google.com": { clientId: "xxxx" } });
+sessionMiddleware.oauth2({
+  "github.com": { clientId: "xxxx", clientSecret: "zzzz" },
+});
 sessionMiddleware.challenge({ notify, store });
 sessionMiddleware.credentials();
 
@@ -261,11 +264,14 @@ async function logoutHandler(req) {
 ```js
 let Auth3000 = require("auth3000");
 
-let sessionMiddleware = Auth3000(issuer privkey, {});
+let sessionMiddleware = Auth3000(issuer, privkey, {});
 
 sessionMiddleware.login(getClaims);
 
-sessionMiddleware.oidc({ google: { clientId: "xxxx" } });
+sessionMiddleware.oidc({ "accounts.google.com": { clientId: "xxxx" } });
+sessionMiddleware.oauth2({
+  "github.com": { clientId: "xxxx", clientSecret: "zzzz" },
+});
 sessionMiddleware.challenge({ notify, store });
 sessionMiddleware.credentials();
 
@@ -475,7 +481,7 @@ These are the options that can be passed to `verify`:
 
 ```txt
 iss         - the base url of the token issuer
-              ex: https://accounts.google.com
+              ex: https://myapp.example.com
 
 optional    - token is not required
               (but invalid tokens will be rejected)
@@ -614,12 +620,12 @@ Set-Cookie: xxxxx
 }
 ```
 
-## POST /api/authn/session/oidc/google.com
+## POST /api/authn/session/oidc/accounts.google.com
 
 Request
 
 ```txt
-POST /api/authn/session/oidc/google.com
+POST /api/authn/session/oidc/accounts.google.com
 Authorization: Bearer <token>
 ```
 
