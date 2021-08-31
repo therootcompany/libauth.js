@@ -2,6 +2,6 @@
   "esversion": 11,
   "node": true,
   "browser": true,
-  "unused": true,
+  "unused": "nofunc",
   "curly": true
 }
