@@ -9,6 +9,8 @@ cookies.jar
 *.jwk.*
 *.pem
 
+.*.sw*
+
 # Logs
 logs
 *.log
