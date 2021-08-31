@@ -1,15 +1,42 @@
 "use strict";
 
+// TODO add types to keyfetch
+//@ts-ignore
 let Keyfetch = require("keyfetch");
 let E = require("../lib/errors.js");
 
-module.exports = function authMiddleware({
+/*
+ * @typedef {Object} VerifyOpts
+ * @property {any} [pub]
+ * @property {string} iss
+ * @property {boolean} [optional]
+ * @property {string} [userParam]
+ * @property {string} [jwsParam]
+ */
+
+/*
+ * @param {VerifyOpts}
+ * @returns {import('express').Handler}
+ */
+
+/**
+ * @param {{
+ *   pub?: any,
+ *   iss: string,
+ *   optional?: boolean,
+ *   userParam?: string,
+ *   jwsParam?: string,
+ * }} opts
+ * @returns {import('express').Handler}
+ */
+function authMiddleware({
   pub,
   iss,
   optional = false,
   userParam = "user",
   jwsParam = "jws",
 }) {
+  /** @type {import('express').Handler} */
   return async function (req, res, next) {
     let parts = (req.headers.authorization || "").split(" ");
     let jwt = parts[1];
@@ -33,17 +60,27 @@ module.exports = function authMiddleware({
         jwk: pub,
         issuers: [iss],
       })
-      .then(function (jws) {
-        req[jwsParam] = jws;
-        if (userParam) {
-          req[userParam] = req[jwsParam].claims;
+      .then(
+        /** @param {any} jws */
+        function (jws) {
+          //@ts-ignore
+          req[jwsParam] = jws;
+          if (userParam) {
+            //@ts-ignore
+            req[userParam] = req[jwsParam].claims;
+          }
+          next();
         }
-        next();
-      })
-      .catch(function (err) {
-        //let err2 = E.INVALID_TOKEN();
-        //err2._original = err;
-        next(err);
-      });
+      )
+      .catch(
+        /** @param {Error} err */
+        function (err) {
+          //let err2 = E.INVALID_TOKEN();
+          //err2._original = err;
+          next(err);
+        }
+      );
   };
-};
+}
+
+module.exports = authMiddleware;
