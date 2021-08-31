@@ -5,7 +5,8 @@
   "main": "index.js",
   "files": [
     "lib",
-    "middleware"
+    "middleware",
+    "types"
   ],
   "scripts": {
     "start": "node example/app.js",
@@ -23,7 +24,8 @@
   },
   "homepage": "https://github.com/therootcompany/auth3000#readme",
   "dependencies": {
-    "@root/async-router": "^1.0.8",
+    "@root/async-router": "^1.0.9",
+    "@types/cookie-parser": "^1.4.2",
     "body-parser": "^1.19.0",
     "cookie-parser": "^1.4.5",
     "dotenv": "^10.0.0",
