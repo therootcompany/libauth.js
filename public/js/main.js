@@ -250,8 +250,13 @@
       let resp = await window
         .fetch(baseUrl + "/api/authn/session/oauth2/github.com", {
           method: "POST",
+          body: JSON.stringify({
+            timezone: new Intl.DateTimeFormat().resolvedOptions().timeZone,
+            language: window.navigator.language,
+          }),
           headers: {
-            authorization: query.access_token,
+            Authorization: query.access_token,
+            "Content-Type": "application/json",
           },
         })
         .catch(die);
