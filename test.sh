@@ -32,7 +32,7 @@ echo ''
 echo ''
 echo 'No Cookies: Expecting Error:'
 if ! curl -sSL -X POST http://localhost:"${PORT}"/api/authn/refresh |
-    grep 'INVALID_SESSION'; then
+    grep 'SESSION_INVALID'; then
     echo "Expected auth error"
     exit 1
 fi
@@ -71,7 +71,7 @@ echo ''
 echo 'Refresh: Expecting Error (logged out)'
 if ! curl -sSL -X POST http://localhost:"${PORT}"/api/authn/refresh \
     -b cookies.jar -c cookies.jar |
-    grep 'INVALID_SESSION'; then
+    grep 'SESSION_INVALID'; then
     echo "Expected auth error"
     exit 1
 fi
