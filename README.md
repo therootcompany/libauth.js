@@ -249,12 +249,13 @@ async function logoutHandler(req) {
 
 | Name                         | Status | Message (truncated)                              |
 | ---------------------------- | ------ | ------------------------------------------------ |
-| E_CODE_RETRY                 | 400    | That verification code isn't correct. It migh... |
 | E_CODE_INVALID               | 400    | That verification code isn't valid. It might ... |
-| E_UNVERIFIED_OIDC_IDENTIFIER | 400    | You cannot use the identifier associated with... |
+| E_CODE_REDEEMED              | 400    | That verification code has already been used ... |
+| E_CODE_RETRY                 | 400    | That verification code isn't correct. It may ... |
+| E_OIDC_UNVERIFIED_IDENTIFIER | 400    | You cannot use the identifier associated with... |
+| E_SESSION_INVALID            | 400    | Missing or invalid cookie session. Please log... |
 | E_SUSPICIOUS_REQUEST         | 400    | Something suspicious is going on - as if ther... |
 | E_SUSPICIOUS_TOKEN           | 400    | Something suspicious is going on - the given ... |
-| E_INVALID_SESSION            | 400    | Missing or invalid cookie session. Please log... |
 | E_DEVELOPER_ERROR            | 422    | Oops! One of the programmers made a mistake. ... |
 | " -> WRONG_TOKEN_TYPE        | 422    | the HTTP Authorization was not given in a sup... |
 | " -> MISSING_TOKEN           | 401    | the required authorization token was not prov... |
