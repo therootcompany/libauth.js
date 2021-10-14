@@ -1,12 +1,12 @@
 {
   "name": "auth3000",
-  "version": "0.13.2-pre.3",
+  "version": "0.14.0-pre.2",
   "description": "Modern, OpenID Connect compatible authentication.",
   "main": "index.js",
   "files": [
     "lib",
     "middleware",
-    "types"
+    "types.js"
   ],
   "scripts": {
     "start": "node example/app.js",
