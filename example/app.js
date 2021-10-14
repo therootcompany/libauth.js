@@ -12,7 +12,8 @@ async function main() {
   let issuer = process.env.BASE_URL || `http://localhost:${process.env.PORT}`;
 
   let DB = require("./db.js");
-  async function getClaims(req) {
+  // TODO is a default 'login' even possible?
+  async function login(req) {
     let { strategy, email, iss, ppid, jws } = req.authn;
 
     // TODO document strategies
@@ -186,22 +187,23 @@ async function getUserByPassword(req) {
     },
   };
 
-  let sessionMiddleware = require("../")(
-    issuer,
-    process.env.PRIVATE_KEY,
-    // TODO is a default getClaims even possible?
-    getClaims
-  );
+  let Auth3000 = require("../");
+  let privkey = JSON.parse(process.env.PRIVATE_KEY);
+  let sessionMiddleware = Auth3000(issuer, privkey, { DEVELOPMENT: false });
+  sessionMiddleware.login(login);
+  sessionMiddleware.exchange(login);
 
   sessionMiddleware.options({
     //secret: process.env.HMAC_SECRET || process.env.COOKIE_SECRET,
   });
   sessionMiddleware.oidc({
-    google: { clientId: process.env.GOOGLE_CLIENT_ID },
+    "accounts.google.com": { clientId: process.env.GOOGLE_CLIENT_ID },
   });
   sessionMiddleware.challenge({
     notify: notify,
     store: store,
+    maxAge: "24h",
+    maxAttempts: 5,
   });
   sessionMiddleware.router();
 
