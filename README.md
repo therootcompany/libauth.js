@@ -24,7 +24,7 @@ sessionMiddleware.oidc({ "accounts.google.com": { clientId: "xxxx" } });
 sessionMiddleware.oauth2({
   github: { clientId: "xxxx", clientSecret: "xxxx" },
 });
-sessionMiddleware.challenge({ notify, store });
+sessionMiddleware.challenge({ notify, store, maxAge: "24h", maxAttempts: 5 });
 sessionMiddleware.credentials();
 
 // /api/authn/{session,refresh,exchange,challenge,logout}
@@ -105,7 +105,7 @@ sessionMiddleware.oidc({ "accounts.google.com": { clientId: "xxxx" } });
 sessionMiddleware.oauth2({
   "github.com": { clientId: "xxxx", clientSecret: "zzzz" },
 });
-sessionMiddleware.challenge({ notify, store });
+sessionMiddleware.challenge({ notify, store, maxAge: "24h", maxAttempts: 5 });
 sessionMiddleware.credentials();
 
 // Refresh will re-issue an id_token
@@ -273,7 +273,7 @@ sessionMiddleware.oidc({ "accounts.google.com": { clientId: "xxxx" } });
 sessionMiddleware.oauth2({
   "github.com": { clientId: "xxxx", clientSecret: "zzzz" },
 });
-sessionMiddleware.challenge({ notify, store });
+sessionMiddleware.challenge({ notify, store, maxAge: "24h", maxAttempts: 5 });
 sessionMiddleware.credentials();
 
 sessionMiddleware.logout(function (req) {
@@ -318,7 +318,8 @@ strategy      - the name of the authentication method
 
   - challenge   - send a secret to the user (via email or phone)
                   and ask them to enter it, or click a link
-                  a.k.a. Magic Link, Verification Code, etc
+                  a.k.a. Magic Link, Password Reset, Verification
+                  Code, etc
                 Uses: req.body
                 Sends: Set-Cookie (refresh_token), id_token
 
