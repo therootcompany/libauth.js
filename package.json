@@ -5,6 +5,7 @@
   "main": "index.js",
   "files": [
     "lib",
+    "challenge",
     "middleware",
     "types"
   ],
