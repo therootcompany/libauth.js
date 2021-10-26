@@ -9,7 +9,7 @@ let issuer = "http://localhost:3000";
 let privkey = JSON.parse(fs.readFileSync("./key.jwk.json"));
 let sessionMiddleware = Auth3000(issuer, privkey, { DEVELOPMENT: false });
 
-sessionMiddleware.login(async function (req) {
+sessionMiddleware.login(async function (req, res) {
   let { strategy, email, iss, ppid, oidc_claims } = req.authn;
 
   switch (strategy) {
@@ -90,7 +90,7 @@ let issuer = "http://localhost:3000";
 // jwk object (note: if you have a key in another format, see 'Converting PEM' below)
 let privkey = JSON.parse(fs.readFileSync("./privkey.jwk.json", "utf8"));
 
-// the private key will be used if secret is not provided
+// the private key will be used if `secret` is not provided
 let secret = crypto.randomBytes(16).toString("base64");
 let sessionMiddleware = require("auth3000")(issuer, privkey, {
   DEVELOPMENT: false,
@@ -148,7 +148,7 @@ app.use("/api/hello", function (req, res) {
 // The various auth handlers are where you do the real decision-making.
 // You have full access to the `req` object to use as you see fit.
 
-async function loginHandler(req) {
+async function loginHandler(req, res) {
   let { strategy, email } = req.authn;
   let idClaims;
 
@@ -190,16 +190,16 @@ async function loginHandler(req) {
   // or an access_token (including roles, permissions, etc), or both
 
   let { role = "user" } = await db.Account.getRole({ user_id: sub });
-  return {
+  await res.issue({
     // 'sub' is "subject" a.k.a. user_id
     // 'jti' is the token id
     claims: { jti, sub: idClaims.user_id },
     id_claims: { familiar_name: idClaims.familiar_name },
     access_claims: { role },
-  };
+  });
 }
 
-async function exchangeHandler(req) {
+async function exchangeHandler(req, res) {
   // 'jws' refers to the signed jwt cookie
   // 'jti' is the token id
   let jti = req.authn.jws.claims.jti;
@@ -231,7 +231,7 @@ async function exchangeHandler(req) {
       throw new Error("unsupported login strategy");
   }
 
-  return { id_claims, access_claims };
+  await res.issue({ id_claims, access_claims });
 }
 
 // Note: this will be called whenever an id cookie is destroyed
@@ -267,7 +267,7 @@ let Auth3000 = require("auth3000");
 
 let sessionMiddleware = Auth3000(issuer, privkey, {});
 
-sessionMiddleware.login(getClaims);
+sessionMiddleware.login(loginHandler);
 
 sessionMiddleware.oidc({ "accounts.google.com": { clientId: "xxxx" } });
 sessionMiddleware.oauth2({
@@ -286,17 +286,17 @@ sessionMiddleware.wellKnown();
 ```
 
 ```js
-function getClaims(req) {
+function loginHandler(req, res) {
   let { strategy, email, iss, ppid } = req.authn;
 
-  return {
+  await res.issue({
     claims: { sub: "<user-id>" },
     id_claims: { nickname: "<display-name>" },
     access_claims: { role: "<optional-role>" },
     refresh_claims: {
       /*overrides*/
     },
-  };
+  });
 }
 ```
 
@@ -316,7 +316,7 @@ strategy      - the name of the authentication method
                 Uses: { email, iss, id, oauth_profile } = req.authn
                 Sends: Set-Cookie (refresh_token), id_token
 
-  - challenge   - send a secret to the user (via email or phone)
+  - challenge   - send a code to the user (via email or phone)
                   and ask them to enter it, or click a link
                   a.k.a. Magic Link, Password Reset, Verification
                   Code, etc
@@ -394,6 +394,60 @@ Common claims include:
     access-only
 ```
 
+## Challenge (Magic Link)
+
+Exposed so that you can use the challenge response outside of the login process.
+
+```js
+let verifier = require("@root/auth3000/verifier").create({
+  maxAge: "24h",
+  maxAttempts: 5,
+
+  // important
+  notify: async function (req) {},
+  store: {
+    get: async function (id) {},
+    set: async function (id, val) {},
+  },
+
+  // optional
+  coolDownMs: 250,
+  idByteCount: 4,
+  idEncoding: "base64",
+  maxAge: "24h",
+  maxAttempts: 5,
+  receiptByteCount: 16,
+  receiptEncoding: "base64",
+
+  // important, but defaults will be set from auth3000 if not provided
+  iss: "",
+  secret: "",
+  authnParam: "authn",
+});
+
+auth3000.challenge(verifier);
+```
+
+```js
+let c = verifier.create({ type: "email", value: "me@example.com" }, req, opts);
+
+verifier.get(id);
+verifier.set(id, c);
+verifier.notify(c, req, opts);
+
+// `code` is optional. If provided it will count against the maxAttempts
+verifier.check(id, code, req);
+verifier.redeem(id, code, req);
+verifier.exchange(id, receipt, req);
+
+// used by auth3000 to set `iss`, `secret`, and `authnParam`
+verifier.setDefaults({
+  iss: iss,
+  secret: secret,
+  authParam: authParam,
+});
+```
+
 ### store (for Verification)
 
 The store is a simple Key/Value store. You could use any database, a file, or
@@ -422,17 +476,17 @@ The notify function is intended to be used for:
 
 ```js
 function notify(req) {
-  let { type, value, secret, id, jws, issuer } = req.authn;
+  let { type, value, code, id, jws, issuer } = req.authn;
   // type = "email"
   // value = "john@example.com"
 
   // What you should do:
   //
   //   1. Construct a URL with the ID and Secret
-  //      (or at least a page where the user can enter the secret)
+  //      (or at least a page where the user can enter the code)
   //
   //   2. Send a message via Email, SMS, or whatever you want to verify
-  //      (must provide 'secret', 'id' is somewhat optional)
+  //      (must provide 'code', 'id' is somewhat optional)
   //
   //   3. `req.body` will have whatever you sent
   //      (I use 'req.body.template' to send different messages for
@@ -440,7 +494,7 @@ function notify(req) {
 
   await sendMessage(
     req.body.template,
-    `${issuer}/my-login?id=${id}&secret=${secret}`
+    `${issuer}/my-login?id=${id}&code=${code}`
   );
 
   return null;
@@ -454,7 +508,7 @@ type    - the type of identifier you wish to verify
 value   - the identifier itself
           ex: 'john@example.com' or '+18005551234'
 
-secret  - the random string required to finalize the verification
+code    - the random string required to finalize the verification
           ex: AB34-EF78
 
 id      - public id used for checking status of verification
@@ -507,11 +561,11 @@ app.use("/api/debug/inspect", function (req, res) {
 
 There are a variety of standard options, which you can read about in
 [the OIDC spec](https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims),
-as well as your own custom "claims" as provided by you in `getClaims`.
+as well as your own custom "claims" as provided by you in `loginHandler`.
 
 ```txt
 req.user    - the same as req.jws.claims, which include what you passed back
-              in `getClaims`, for example:
+              in `loginHandler`, for example:
               {
                 jti: "xxxx",
                 iat: 1622849000, // seconds since unix epoch
@@ -803,7 +857,7 @@ POST /api/auth/challenge/finalize
 ```json
 {
   "id": "abc123",
-  "secret": "AB34-EF78"
+  "code": "AB34-EF78"
 }
 ```
 
@@ -827,13 +881,13 @@ Response
 
 Request
 
-Use either `receipt` or `secret`.
+Use either `receipt` or `code`.
 
 ```txt
 GET /api/auth/challenge
     ?id=abc123
     &receipt=yyyyyyyy
-    &secret=AB34-EF78
+    &code=AB34-EF78
 ```
 
 Response
