@@ -117,7 +117,7 @@
  * @typedef {Object} OidcMiddlewareOpts
  * @property {import('express').Router} app
  * @property {any} opts
- * @property {function} _getClaims
+ * @property {function} _strategyHandler
  * @property {function} grantTokensAndCookie
  * @property {function} verifyOidcToken
  */
@@ -126,7 +126,7 @@
  * @typedef {Object} Oauth2MiddlewareOpts
  * @property {import('express').Router} app
  * @property {any} opts
- * @property {function} _getClaims
+ * @property {function} _strategyHandler
  * @property {function} grantTokensAndCookie
  */
 
