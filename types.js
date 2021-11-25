@@ -34,6 +34,9 @@
  * @property {string} exchanged_at
  * @property {string} exchanged_by
  * @property {string} exchanged_ip
+ * @property {string} canceled_at
+ * @property {string} canceled_by
+ * @property {string} canceled_ip
  * @property {string} deleted_at
  * @property {string} type // such as 'email' or 'tel'
  * @property {string} value // such as 'me@example.com'
