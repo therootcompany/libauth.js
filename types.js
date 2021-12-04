@@ -8,6 +8,14 @@
  */
 
 /**
+ * Callback for adding two numbers.
+ *
+ * @callback tokenVerifier
+ * @param {Jws} jws - A JWS (decoded JWT).
+ * @returns Promise
+ */
+
+/**
  * @typedef {Object} AuthN
  * @property {string} [strategy]
  * @property {string} [type]
