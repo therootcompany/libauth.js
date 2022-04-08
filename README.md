@@ -816,7 +816,7 @@ A possible flow for that:
 
 ## POST /api/authn/challenge/order
 
-This should call `notify` which should send an email according to a template.
+This will invoke `notify` which should send an email according to a template.
 
 Request
 
@@ -827,7 +827,11 @@ POST /api/authn/challenge/order
 ```json
 {
   "type": "email",
-  "value": "john.doe@gmail.com"
+  "value": "john.doe@gmail.com",
+  "state": {
+    "foo": "bar",
+    "whatever": "you need"
+  }
 }
 ```
 
@@ -873,11 +877,15 @@ Response
 ```json
 {
   "id_token": "xxxx.yyyy.zzzz",
-  "access_token": "xxx2.yyy2.zzz2"
+  "access_token": "xxx2.yyy2.zzz2",
+  "state": {
+    "foo": "bar",
+    "whatever": "you need"
+  }
 }
 ```
 
-## GET /api/authn/challenge
+## GET /api/authn/challenge/status
 
 Request
 
@@ -906,7 +914,11 @@ Either `verified_at` will be empty, or it will have a value.
   "ordered_at": "2021-06-20T13:30:59Z",
   "ordered_by": "Chrome/x.y.z Windows 10",
   "verified_at": "",
-  "verified_by": ""
+  "verified_by": "",
+  "state": {
+    "foo": "bar",
+    "whatever": "you need"
+  }
 }
 ```
 
@@ -917,7 +929,11 @@ Either `verified_at` will be empty, or it will have a value.
   "ordered_at": "2021-06-20T13:30:59Z",
   "ordered_by": "Chrome/x.y.z Windows 10",
   "verified_at": "2021-06-20T13:31:42Z",
-  "verefied_by": "Safari/x.y iPhone iOS 17"
+  "verefied_by": "Safari/x.y iPhone iOS 17",
+  "state": {
+    "foo": "bar",
+    "whatever": "you need"
+  }
 }
 ```
 
@@ -950,7 +966,11 @@ Response
   "success": true,
   "status": "valid",
   "id_token": "xxxx.yyyy.zzzz",
-  "access_token": "xxx2.yyy2.zzz2"
+  "access_token": "xxx2.yyy2.zzz2",
+  "state": {
+    "foo": "bar",
+    "whatever": "you need"
+  }
 }
 ```
 
