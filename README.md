@@ -20,15 +20,73 @@ sessionMiddleware.login(async function (req, res) {
       throw new Error("unsupported auth strategy");
   }
 });
-sessionMiddleware.oidc({ "accounts.google.com": { clientId: "xxxx" } });
-sessionMiddleware.oauth2({
-  github: { clientId: "xxxx", clientSecret: "xxxx" },
-});
-sessionMiddleware.challenge({ notify, store, maxAge: "24h", maxAttempts: 5 });
-sessionMiddleware.credentials();
 
-// /api/authn/{session,refresh,exchange,challenge,logout}
-app.use("/api/authn", sessionMiddleware.router());
+// OIDC Login (i.e. Google, Auth0, Okta)
+let oidcRoutes = sessionMiddleware.oidc({
+  "accounts.google.com": { clientId: "xxxx" },
+});
+app.post(
+  "/api/authn/oidc/accounts.google.com",
+  oidcRoutes["accounts.google.com"]
+);
+// app.post("/api/authn/oidc/:issuer", oidcRoutes);
+
+let oauth2Routes = sessionMiddleware.oauth2({
+  "github.com": { clientId: "xxxx", clientSecret: "xxxx" },
+});
+app.post("/api/authn/oauth2/github.com", oauth2Routes["github.com"]);
+
+// Magic Link (challenge-based auth)
+let challengeRoutes = sessionMiddleware.challenge({
+  notify,
+  store,
+  maxAge: "24h",
+  maxAttempts: 5,
+});
+app.post("/api/authn/challenge/order", challengeRoutes.orderVerification);
+app.get("/api/authn/challenge/status", challengeRoutes.checkStatus);
+app.post("/api/authn/challenge/finalize", challengeRoutes.redeemCode);
+app.post("/api/authn/challenge/exchange", challengeRoutes.exchangeReceipt);
+
+// Credential (User/Pass) Auth
+// TODO
+app.post(
+  "/api/authn/session",
+  sessionMiddleware.credentials(async function (req) {
+    let auth = req.body;
+    await Users.validatePassword({
+      email: auth.email,
+      password: auth.password,
+    });
+  })
+);
+
+app.post("/api/authn/refresh", sessionMiddleware.refresh(), function (req, res) {
+  await libauth.grantCookie(res)
+  // ...
+});
+app.post("/api/authn/exchange", sessionMiddleware.exchange(), function (req, res) {
+  await libauth.grantCookie(res)
+  // ...
+});
+
+app.use("/api/authn", async function (req, res) {
+  //req.authn
+  let user = User.get(req.authn.email);
+  await libauth.grantCookie(user, res);
+
+  let tokens = await libauth.grantTokens(user);
+  res.json(tokens);
+});
+
+// Logout (delete session cookie)
+app.delete(
+  "/api/authn/session",
+  sessionMiddleware.logout(async function (req) {
+    SessionsModel.delete(req.authn.jws.claims.jti);
+  })
+);
+
 // /.well-known/openid-configuration
 app.use("/", sessionMiddleware.wellKnown());
 ```
