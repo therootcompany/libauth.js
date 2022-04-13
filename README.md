@@ -929,7 +929,7 @@ Either `verified_at` will be empty, or it will have a value.
   "ordered_at": "2021-06-20T13:30:59Z",
   "ordered_by": "Chrome/x.y.z Windows 10",
   "verified_at": "2021-06-20T13:31:42Z",
-  "verefied_by": "Safari/x.y iPhone iOS 17",
+  "verified_by": "Safari/x.y iPhone iOS 17",
   "state": {
     "foo": "bar",
     "whatever": "you need"
