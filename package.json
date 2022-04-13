@@ -5,6 +5,7 @@
   "main": "index.js",
   "files": ["@types", "lib", "verifier", "middleware", "types.js"],
   "scripts": {
+    "fmt": "npx prettier@2.x -w '**/*.{md,js,html,css}'",
     "start": "node example/app.js",
     "genenv": "node ./utils/genenv.js",
     "test": "bash ./test.sh"
