@@ -38,12 +38,24 @@ app.post("/api/authn/oauth2/github.com", oauth2Routes["github.com"]);
 
 // Magic Link (challenge-based auth)
 let challengeRoutes = sessionMiddleware.challenge({
-  notify,
   store,
   maxAge: "24h",
   maxAttempts: 5,
 });
-app.post("/api/authn/challenge/order", challengeRoutes.orderVerification);
+app.post(
+  "/api/authn/challenge/order",
+  challengeRoutes.order,
+  async function notify(req, res, next) {
+    let vars = req.authn;
+    await mailer.send({
+      subject: `Your Magic Link is here! ${vars.code}.`,
+      text:
+        `Enter this login code when prompted: ${vars.code}. \n` +
+        `Or login with this link: https://${vars.iss}/login/#/${vars.id}/${vars.code}`,
+    });
+    res.json(req.authn.order);
+  }
+);
 app.get("/api/authn/challenge/status", challengeRoutes.checkStatus);
 app.post("/api/authn/challenge/finalize", challengeRoutes.redeemCode);
 app.post("/api/authn/challenge/exchange", challengeRoutes.exchangeReceipt);
@@ -61,14 +73,22 @@ app.post(
   })
 );
 
-app.post("/api/authn/refresh", sessionMiddleware.refresh(), function (req, res) {
-  await libauth.grantCookie(res)
-  // ...
-});
-app.post("/api/authn/exchange", sessionMiddleware.exchange(), function (req, res) {
-  await libauth.grantCookie(res)
-  // ...
-});
+app.post(
+  "/api/authn/refresh",
+  sessionMiddleware.refresh(),
+  async function (req, res) {
+    await libauth.grantCookie(res);
+    // ...
+  }
+);
+app.post(
+  "/api/authn/exchange",
+  sessionMiddleware.exchange(),
+  async function (req, res) {
+    await libauth.grantCookie(res);
+    // ...
+  }
+);
 
 app.use("/api/authn", async function (req, res) {
   //req.authn
@@ -305,18 +325,19 @@ async function logoutHandler(req) {
 
 ## Errors
 
-| Name                         | Status | Message (truncated)                              |
-| ---------------------------- | ------ | ------------------------------------------------ |
-| E_CODE_INVALID               | 400    | That verification code isn't valid. It might ... |
-| E_CODE_REDEEMED              | 400    | That verification code has already been used ... |
-| E_CODE_RETRY                 | 400    | That verification code isn't correct. It may ... |
-| E_OIDC_UNVERIFIED_IDENTIFIER | 400    | You cannot use the identifier associated with... |
-| E_SESSION_INVALID            | 400    | Missing or invalid cookie session. Please log... |
-| E_SUSPICIOUS_REQUEST         | 400    | Something suspicious is going on - as if ther... |
-| E_SUSPICIOUS_TOKEN           | 400    | Something suspicious is going on - the given ... |
-| E_DEVELOPER_ERROR            | 422    | Oops! One of the programmers made a mistake. ... |
-| " -> WRONG_TOKEN_TYPE        | 422    | the HTTP Authorization was not given in a sup... |
-| " -> MISSING_TOKEN           | 401    | the required authorization token was not prov... |
+| Name                         | Status   | Message (truncated)                              |
+| ---------------------------- | -------- | ------------------------------------------------ |
+| E_CODE_NOT_FOUND             | 404      | That verification code isn't valid. It might ... |
+| E_CODE_INVALID               | 400\|403 | That verification code isn't valid. It might ... |
+| E_CODE_REDEEMED              | 400      | That verification code has already been used ... |
+| E_CODE_RETRY                 | 400      | That verification code isn't correct. It may ... |
+| E_OIDC_UNVERIFIED_IDENTIFIER | 400      | You cannot use the identifier associated with... |
+| E_SESSION_INVALID            | 400      | Missing or invalid cookie session. Please log... |
+| E_SUSPICIOUS_REQUEST         | 400      | Something suspicious is going on - as if ther... |
+| E_SUSPICIOUS_TOKEN           | 400      | Something suspicious is going on - the given ... |
+| E_DEVELOPER_ERROR            | 422      | Oops! One of the programmers made a mistake. ... |
+| " -> WRONG_TOKEN_TYPE        | 422      | the HTTP Authorization was not given in a sup... |
+| " -> MISSING_TOKEN           | 401      | the required authorization token was not prov... |
 
 ## Authentication (Issuer) Middleware
 
