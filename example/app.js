@@ -48,10 +48,10 @@ async function main() {
     }
   */
 
-  async function notify(req, res, next) {
-    let vars = req.authn;
+  async function notify(vars) {
+    //let vars = req.authn;
     // Notify via CLI
-    console.log(req.authn);
+    console.log(vars);
     console.log({
       subject: `Your Magic Link is here! ${vars.code}.`,
       text:
@@ -59,7 +59,6 @@ async function main() {
         // `Or login with this link: ${vars.iss}/login/#/${vars.id}/${vars.code}`,
         `Or login with this link: ${vars.iss}/#login?id=${vars.id}&token=${vars.code}`,
     });
-    res.json(req.authn.order);
   }
 
   function greet(req, res) {
@@ -81,100 +80,169 @@ async function main() {
   let cookieSecret = process.env.HMAC_SECRET || process.env.COOKIE_SECRET;
   app.use("/api/authn", cookieParser(cookieSecret)); // needed to set cookies?
 
-  /*
+  // TODO
   app.post(
-    "/api/authn/credentials",
-    libauth.credentials(),
-    function (req, res) {
-      // TODO check email + pass
-    },
-    function (err, req, next) {
-      // TODO order magic link
-      challengeRoutes.order(req, res, notify);
-    }
-  );
-  */
+    "/api/authn/session/credentials",
+    libauth.credentials(/*{
+      // Defaults
+      basic: true,
+      username: "username",
+      password: "password",
+    }*/),
+    async function (req, res, next) {
+      // TODO assertSecureCompare?
+      req.authn.valid = libauth.secureCompare(
+        req.authn.password,
+        "my-password",
+        6,
+      );
+      if (!req.authn.valid) {
+        let err = new Error("password is too short or doesn't match");
+        err.code = "E_CREDENTIALS_INVALID";
+        err.status = 400;
+        throw err;
+      }
 
-  app.post("/api/authn/challenge/order", challengeRoutes.order, notify);
+      // Note: the behavior of send-magic-link-on-auth-failure
+      // belongs to the client side
+
+      next();
+    },
+  );
+
+  app.post(
+    "/api/authn/challenge/order",
+    /*
+    async function checkForMfa(req, res, next) {
+      let user = DB.get(...)
+      //req.authn.state.mfa = user.requires_mfa;
+      req.body.state.mfa = user.requires_mfa;
+      next();
+    },
+    */
+    challengeRoutes.order,
+    async function (req, res) {
+      await notify(req.authn);
+      res.json(req.authn.order);
+    },
+  );
   app.get(
     "/api/authn/challenge/status",
     challengeRoutes.checkStatus,
     function (req, res) {
-      // TODO
       res.json(req.authn.status);
-    }
+    },
   );
 
   app.post(
+    // "/api/authn/session/magic/link",
     "/api/authn/challenge/finalize",
     challengeRoutes.useCode,
     async function (req, res, next) {
+      // get a new session
       let user = await DB.get({
         // TODO check if it's actually email!
         email: req.authn.identifier.value,
       });
-      req.user = user;
-      // TODO get user
-      console.log("DEBUG req.authn:", req.authn);
+
+      req.authn.user = user;
       next();
-    }
+    },
   );
   app.post(
+    // "/api/authn/session/magic/receipt",
     "/api/authn/challenge/exchange",
     challengeRoutes.useReceipt,
     async function (req, res, next) {
+      // get a new session
       let user = await DB.get({
         // TODO check if it's actually email!
         email: req.authn.identifier.value,
       });
-      req.user = user;
+
+      req.authn.user = user;
       next();
-    }
+    },
   );
+
+  let oidcRoutes = libauth.oidc({
+    "accounts.google.com": { clientId: process.env.GOOGLE_CLIENT_ID },
+  });
+  app.use(
+    "/api/authn/session/oidc/accounts.google.com",
+    oidcRoutes["accounts.google.com"],
+    async function (req, res, next) {
+      // get a new session
+      let user = await DB.get({ ppid: req.authn.ppid });
+
+      req.authn.user = user;
+      console.log("DEBUG got here 3!", req.authn);
+      next();
+    },
+  );
+
   app.post(
     "/api/authn/refresh",
     libauth.refresh(),
     async function (req, res, next) {
+      // get a new id token from a refresh token
       let user = await DB.get({ id: req.authn.jws.claims.sub });
-      req.user = user;
+
+      req.authn.user = user;
+      console.log("DEBUG refresh authn", req.authn);
       next();
-    }
+    },
   );
   app.post(
     "/api/authn/exchange",
     libauth.exchange(),
     async function (req, res, next) {
+      // get a new access token from an ID token (or refresh token?)
       let user = await DB.get({ id: req.authn.jws.claims.sub });
-      req.user = user;
+
+      req.authn.user = user;
       next();
-      //await libauth.grantCookie(res);
-      // ...
-    }
+    },
   );
 
   app.use("/api/authn", async function (req, res) {
-    let user = await DB.get({
-      email: req.authn.email,
-    });
-    console.log("DEBUG user", user);
-
+    let user = req.authn.user;
     let allClaims = {
       claims: {
-        sub: user.id,
+        sub: user.sub,
         given_name: user.first_name,
       },
     };
-    await libauth.grantCookie(req, res, allClaims);
+    await libauth.grantCookieIfNewSession(req, res, allClaims);
     let tokens = await libauth.grantTokens(allClaims);
     res.json(tokens);
+  });
+  app.use("/api/authn", async function (err, req, res, next) {
+    res.statusCode = err.status || 500;
+    if (500 == res.statusCode) {
+      console.error(err.stack);
+    }
+    res.json({
+      success: false,
+      code: err.code,
+      status: err.status,
+      message: err.message,
+    });
   });
 
   // Logout (delete session cookie)
   app.delete(
     "/api/authn/session",
-    libauth.logout(async function (req) {
-      SessionsModel.delete(req.authn.jws.claims.jti);
-    })
+    libauth.logout(),
+    async function (req, res, next) {
+      // TODO
+      // SessionsModel.delete(req.authn.jws.claims.jti);
+      next();
+    },
+    async function (err, req, res, next) {
+      // they weren't logged in anyway
+      res.json({ success: true });
+    },
   );
 
   // /.well-known/openid-configuration
@@ -222,7 +290,7 @@ async function main() {
         success: true,
         id: id,
       });
-    }
+    },
   );
   app.get(
     "/api/dummy/:id",
@@ -235,7 +303,7 @@ async function main() {
       }
 
       res.json({ success: false, code: "NOT_FOUND", message: "invalid id" });
-    }
+    },
   );
   app.get(
     "/api/dummy",
@@ -243,7 +311,7 @@ async function main() {
     function (req, res) {
       let dummyIds = Object.keys(dummies);
       res.json({ success: true, result: dummyIds });
-    }
+    },
   );
 
   //

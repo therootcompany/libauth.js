@@ -6,7 +6,7 @@
 
   // scheme => 'https:'
   // host => 'localhost:3000'
-  // pathname => '/api/authn/session/oidc/google.com'
+  // pathname => '/api/authn/session/oidc/accounts.google.com'
   let baseUrl = document.location.protocol + "//" + document.location.host;
 
   // AJQuery
@@ -286,7 +286,7 @@
     if ("https://accounts.google.com" === jws.claims.iss) {
       // TODO make sure we've got the right options for fetch !!!
       let resp = await window
-        .fetch(baseUrl + "/api/authn/session/oidc/google.com", {
+        .fetch(baseUrl + "/api/authn/session/oidc/accounts.google.com", {
           method: "POST",
           headers: {
             authorization: query.id_token,

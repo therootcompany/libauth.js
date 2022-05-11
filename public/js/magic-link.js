@@ -6,7 +6,7 @@
 
   // scheme => 'https:'
   // host => 'localhost:3000'
-  // pathname => '/api/authn/session/oidc/google.com'
+  // pathname => '/api/authn/session/oidc/accounts.google.com'
   let baseUrl = `${document.location.protocol}//${document.location.host}`;
 
   // AJQuery
