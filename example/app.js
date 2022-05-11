@@ -197,7 +197,10 @@ async function getUserByPassword(req) {
     //secret: process.env.HMAC_SECRET || process.env.COOKIE_SECRET,
   });
   sessionMiddleware.oidc({
-    "accounts.google.com": { clientId: process.env.GOOGLE_CLIENT_ID },
+    "accounts.google.com": {
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    },
   });
   sessionMiddleware.challenge({
     notify: notify,
