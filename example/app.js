@@ -4,62 +4,41 @@ async function main() {
   require("dotenv").config({ path: ".env" });
   require("dotenv").config({ path: ".env.secret" });
 
+  let Fs = require("fs").promises;
   let http = require("http");
   let express = require("express");
   let app = require("@root/async-router").Router();
 
-  let authenticate = require("../middleware/");
+  let LibAuth = require("../");
   let issuer = process.env.BASE_URL || `http://localhost:${process.env.PORT}`;
+  let privkey = JSON.parse(await Fs.readFile("./key.jwk.json", "utf8"));
+  let libauth = LibAuth.create(issuer, privkey, { DEVELOPMENT: false });
 
   let DB = require("./db.js");
-  // TODO is a default 'login' even possible?
-  async function login(req) {
-    let { strategy, email, iss, ppid, jws } = req.authn;
+  let memstore = {
+    _db: {},
+    set: async function (id, val) {
+      memstore._db[id] = val;
+    },
+    get: async function (id) {
+      return memstore._db[id];
+    },
+  };
 
-    // TODO document strategies
-    console.log("strategy:", strategy);
-    switch (strategy) {
-      case "exchange":
-        return getAccessClaims(req);
-      default:
-      // continue
-    }
+  // Magic Link (challenge-based auth)
+  let challengeRoutes = libauth.challenge({
+    store: memstore,
+    maxAge: "24h",
+    maxAttempts: 5,
+  });
 
+  /*
     // TODO MFA
     let user = await DB.get({
       email: email || (req.body && req.body.user),
       ppid: ppid,
       id: jws && jws.claims.sub,
     });
-    if (req.body.pass) {
-      if ("DEVELOPMENT" !== process.env.ENV) {
-        throw new Error("creds not implemented");
-      }
-      // TODO: check password
-      // (for right now, for testing, we'll just let it slide)
-    }
-    if (!user) {
-      throw new Error("TODO_NOT_FOUND");
-    }
-
-    return {
-      claims: {
-        sub: user.sub,
-        first_name: user.first_name,
-        // these are authz things (for an access token), but for the demo...
-        //account_id: user.account_id,
-      },
-      id_claims: {},
-      access_claims: {
-        roles: user.roles,
-      },
-    };
-  }
-  async function getAccessClaims(req) {
-    let { jws } = req.authn;
-    if (!jws) {
-      throw new Error("INVALID_CREDENTIALS");
-    }
 
     let user = await DB.get({
       id: jws && jws.claims.sub,
@@ -67,145 +46,21 @@ async function main() {
     if (!user) {
       throw new Error("TODO_NOT_FOUND");
     }
+  */
 
-    let account = user.account;
-    if (req.body && req.body.account_id) {
-      let account = user.accounts[req.body.account_id];
-      user.account_id = undefined;
-      if (!account) {
-        throw new Error("TODO_BAD_ACCESS_REQUEST");
-      }
-      user.account_id = account.id;
-      user.roles = account.roles;
-    }
-
-    return {
-      // generic authn, token-related things
-      claims: {
-        sub: user.sub,
-      },
-      // authn-only things
-      id_claims: {
-        first_name: user.first_name,
-      },
-      // authz things
-      access_claims: {
-        account_id: user.account_id,
-        roles: user.roles,
-      },
-    };
-  }
-
-  /*
-async function getUserByPassword(req) {
-  // TODO validate Google Sign In id_token or magic link
-  // (or username and password if you're a bad person)
-  if (!req.body.is_verified) {
-    let err = new Error("Invalid login credentials");
-    err.code = "INVALID_CREDENTIALS";
-    throw new Error("");
-  }
-
-  // TODO use DB
-  return { sub: req.body.sub };
-}
-*/
-
-  async function notify(req) {
-    let { type, value, secret, id } = req.authn;
-    let request = require("@root/request");
-    let rnd = require("../lib/rnd.js");
-
-    if (!process.env.SEND_EMAIL && "DEVELOPMENT" === process.env.ENV) {
-      console.debug("[DEV] skipping email send");
-      return;
-    }
-
-    let preHeader = "";
-    let apiKey = process.env.MAILGUN_PRIVATE_KEY;
-    let domain = process.env.MAILGUN_DOMAIN;
-
-    let from = process.env.EMAIL_FROM;
-    let replyTo = process.env.EMAIL_REPLY_TO;
-    let msgDomain = process.env.EMAIL_ID_DOMAIN;
-
-    // TODO use heml + eta for email templates
-    let challenge_url = `${issuer}/#login?id=${id}&token=${secret}`;
-    let templates = {
-      "magic-link": {
-        subject: "Verify your email",
-        html: `${preHeader}<p>Here's your verification code: ${secret}\n\n<br><br>${challenge_url}</p>`,
-        text: `Here's your verification code: ${secret}\n\n${challenge_url}`,
-      },
-      "forgot-password": {
-        subject: "Password Reset Link",
-        html: `${preHeader}<p>Here's password reset code: ${secret}\n\n${challenge_url}</p>`,
-        text: `Here's password reset code: ${secret}\n\n${challenge_url}`,
-      },
-    };
-    let data = templates[req.body.template];
-    if (!data) {
-      throw new Error(
-        "Developer Error: invalid `template` value '" +
-          req.body.template +
-          "'. If you're just a regular person seeing this, it's not your fault. we did something wrong on our end."
-      );
-    }
-
-    let rndval = rnd();
-    let resp = await request({
-      url: `https://api.mailgun.net/v3/${domain}/messages`,
-      auth: `api:${apiKey}`,
-      form: {
-        from: from,
-        "h:Reply-To": replyTo,
-        "h:Message-ID": `${rndval}@${msgDomain}`,
-        "h:X-Entity-Ref-ID": `${rndval}@${msgDomain}`,
-        to: value,
-        subject: data.subject,
-        html: data.html,
-        text: data.text,
-      },
+  async function notify(req, res, next) {
+    let vars = req.authn;
+    // Notify via CLI
+    console.log(req.authn);
+    console.log({
+      subject: `Your Magic Link is here! ${vars.code}.`,
+      text:
+        `Enter this login code when prompted: ${vars.code}. \n` +
+        // `Or login with this link: ${vars.iss}/login/#/${vars.id}/${vars.code}`,
+        `Or login with this link: ${vars.iss}/#login?id=${vars.id}&token=${vars.code}`,
     });
-
-    if (resp.statusCode >= 300) {
-      var err = new Error("failed to email message");
-      err.response = resp;
-      throw err;
-    }
-
-    return null;
+    res.json(req.authn.order);
   }
-
-  let store = {
-    _db: {},
-    set: async function (id, val) {
-      store._db[id] = val;
-    },
-    get: async function (id) {
-      return store._db[id];
-    },
-  };
-
-  let Auth3000 = require("../");
-  let privkey = JSON.parse(process.env.PRIVATE_KEY);
-  let sessionMiddleware = Auth3000(issuer, privkey, { DEVELOPMENT: false });
-  sessionMiddleware.login(login);
-  sessionMiddleware.exchange(login);
-
-  sessionMiddleware.options({
-    //secret: process.env.HMAC_SECRET || process.env.COOKIE_SECRET,
-  });
-  sessionMiddleware.oidc({
-    "accounts.google.com": { clientId: process.env.GOOGLE_CLIENT_ID },
-  });
-  sessionMiddleware.challenge({
-    notify: notify,
-    store: store,
-    maxAge: "24h",
-    maxAttempts: 5,
-  });
-  sessionMiddleware.router();
 
   function greet(req, res) {
     return { message: "Hello, World!" };
@@ -218,20 +73,121 @@ async function getUserByPassword(req) {
     app.use("/", morgan("tiny"));
   }
   app.get("/hello", greet);
-  // TODO is one of refresh,exchange redundant?
-  // /api/authn/{session,refresh,exchange,challenge,logout}
-  app.use("/api/authn", await sessionMiddleware.router());
+
+  let bodyParser = require("body-parser");
+  app.use("/api", bodyParser.json({ limit: "100kb" }));
+
+  let cookieParser = require("cookie-parser");
+  let cookieSecret = process.env.HMAC_SECRET || process.env.COOKIE_SECRET;
+  app.use("/api/authn", cookieParser(cookieSecret)); // needed to set cookies?
+
+  /*
+  app.post(
+    "/api/authn/credentials",
+    libauth.credentials(),
+    function (req, res) {
+      // TODO check email + pass
+    },
+    function (err, req, next) {
+      // TODO order magic link
+      challengeRoutes.order(req, res, notify);
+    }
+  );
+  */
+
+  app.post("/api/authn/challenge/order", challengeRoutes.order, notify);
+  app.get(
+    "/api/authn/challenge/status",
+    challengeRoutes.checkStatus,
+    function (req, res) {
+      // TODO
+      res.json(req.authn.status);
+    }
+  );
+
+  app.post(
+    "/api/authn/challenge/finalize",
+    challengeRoutes.useCode,
+    async function (req, res, next) {
+      let user = await DB.get({
+        // TODO check if it's actually email!
+        email: req.authn.identifier.value,
+      });
+      req.user = user;
+      // TODO get user
+      console.log("DEBUG req.authn:", req.authn);
+      next();
+    }
+  );
+  app.post(
+    "/api/authn/challenge/exchange",
+    challengeRoutes.useReceipt,
+    async function (req, res, next) {
+      let user = await DB.get({
+        // TODO check if it's actually email!
+        email: req.authn.identifier.value,
+      });
+      req.user = user;
+      next();
+    }
+  );
+  app.post(
+    "/api/authn/refresh",
+    libauth.refresh(),
+    async function (req, res, next) {
+      let user = await DB.get({ id: req.authn.jws.claims.sub });
+      req.user = user;
+      next();
+    }
+  );
+  app.post(
+    "/api/authn/exchange",
+    libauth.exchange(),
+    async function (req, res, next) {
+      let user = await DB.get({ id: req.authn.jws.claims.sub });
+      req.user = user;
+      next();
+      //await libauth.grantCookie(res);
+      // ...
+    }
+  );
+
+  app.use("/api/authn", async function (req, res) {
+    let user = await DB.get({
+      email: req.authn.email,
+    });
+    console.log("DEBUG user", user);
+
+    let allClaims = {
+      claims: {
+        sub: user.id,
+        given_name: user.first_name,
+      },
+    };
+    await libauth.grantCookie(req, res, allClaims);
+    let tokens = await libauth.grantTokens(allClaims);
+    res.json(tokens);
+  });
+
+  // Logout (delete session cookie)
+  app.delete(
+    "/api/authn/session",
+    libauth.logout(async function (req) {
+      SessionsModel.delete(req.authn.jws.claims.jti);
+    })
+  );
+
   // /.well-known/openid-configuration
   // /.well-known/jwks.json
-  app.use("/", sessionMiddleware.wellKnown());
+  app.use("/", libauth.wellKnown());
 
   //
   // API Middleware & Handlers
   //
-  let bodyParser = require("body-parser");
-  app.use("/api", bodyParser.json({ limit: "100kb" }));
+  let authenticate = require("../middleware/");
   app.use("/api", authenticate({ iss: issuer, optional: true }));
-  app.use("/api", function (req, res, next) {
+
+  app.use("/api", function _authz(req, res, next) {
     if (!req.user) {
       // TODO bad idea
       req.user = {};

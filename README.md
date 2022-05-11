@@ -6,8 +6,8 @@
 // Authenticate Users
 let Auth3000 = require("auth3000");
 let issuer = "http://localhost:3000";
-let privkey = JSON.parse(fs.readFileSync("./key.jwk.json"));
-let sessionMiddleware = Auth3000(issuer, privkey, { DEVELOPMENT: false });
+let privkey = JSON.parse(fs.readFileSync("./key.jwk.json", "utf8"));
+let sessionMiddleware = Auth3000.create(issuer, privkey, { DEVELOPMENT: false });
 
 sessionMiddleware.login(async function (req, res) {
   let { strategy, email, iss, ppid, oidc_claims } = req.authn;
@@ -344,7 +344,7 @@ async function logoutHandler(req) {
 ```js
 let Auth3000 = require("auth3000");
 
-let sessionMiddleware = Auth3000(issuer, privkey, {});
+let sessionMiddleware = Auth3000.create(issuer, privkey, {});
 
 sessionMiddleware.login(loginHandler);
 
