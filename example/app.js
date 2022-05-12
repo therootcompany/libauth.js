@@ -238,6 +238,7 @@ async function main() {
       // TODO
       // SessionsModel.delete(req.authn.jws.claims.jti);
       next();
+      res.json({ success: true });
     },
     async function (err, req, res, next) {
       // they weren't logged in anyway
