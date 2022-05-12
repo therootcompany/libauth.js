@@ -112,15 +112,15 @@
 
 /**
  * @typedef {Object} OidcVerifyOpts
- * @property {string} [iss]
+ * @property {function|boolean} [verify]
+ * @property {function|boolean} [pluginVerify]
+ * @property {string|boolean} [iss]
+ * @property {string|boolean} [sub]
+ * @property {string|boolean} [aud]
+ * @property {string|boolean} [azp]
  * @property {string|boolean} [exp]
- */
-
-/**
- * @typedef {Object} OidcMiddlewareOpts
- * @property {any} opts
- * @property {string} _issuerName
- * @property {function} verifyOidcToken
+ * @property {string|boolean} [email]
+ * @property {boolean} [email_verified]
  */
 
 /**
