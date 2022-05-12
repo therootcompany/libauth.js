@@ -7,7 +7,9 @@
 let Auth3000 = require("auth3000");
 let issuer = "http://localhost:3000";
 let privkey = JSON.parse(fs.readFileSync("./key.jwk.json", "utf8"));
-let sessionMiddleware = Auth3000.create(issuer, privkey, { DEVELOPMENT: false });
+let sessionMiddleware = Auth3000.create(issuer, privkey, {
+  DEVELOPMENT: false,
+});
 
 sessionMiddleware.login(async function (req, res) {
   let { strategy, email, iss, ppid, oidc_claims } = req.authn;
@@ -27,7 +29,7 @@ let oidcRoutes = sessionMiddleware.oidc({
 });
 app.post(
   "/api/authn/oidc/accounts.google.com",
-  oidcRoutes["accounts.google.com"]
+  oidcRoutes["accounts.google.com"],
 );
 // app.post("/api/authn/oidc/:issuer", oidcRoutes);
 
@@ -54,7 +56,7 @@ app.post(
         `Or login with this link: https://${vars.iss}/login/#/${vars.id}/${vars.code}`,
     });
     res.json(req.authn.order);
-  }
+  },
 );
 app.get("/api/authn/challenge/status", challengeRoutes.checkStatus);
 app.post("/api/authn/challenge/finalize", challengeRoutes.redeemCode);
@@ -70,7 +72,7 @@ app.post(
       email: auth.email,
       password: auth.password,
     });
-  })
+  }),
 );
 
 app.post(
@@ -79,7 +81,7 @@ app.post(
   async function (req, res) {
     await libauth.grantCookie(res);
     // ...
-  }
+  },
 );
 app.post(
   "/api/authn/exchange",
@@ -87,7 +89,7 @@ app.post(
   async function (req, res) {
     await libauth.grantCookie(res);
     // ...
-  }
+  },
 );
 
 app.use("/api/authn", async function (req, res) {
@@ -104,7 +106,7 @@ app.delete(
   "/api/authn/session",
   sessionMiddleware.logout(async function (req) {
     SessionsModel.delete(req.authn.jws.claims.jti);
-  })
+  }),
 );
 
 // /.well-known/openid-configuration
@@ -608,7 +610,7 @@ let verify = require("auth3000/middleware/");
 
 app.use(
   "/api",
-  verify({ iss: issuer, optional: true, userParam: "user", jwsParam: "jws" })
+  verify({ iss: issuer, optional: true, userParam: "user", jwsParam: "jws" }),
 );
 ```
 
@@ -1052,6 +1054,12 @@ Response
   }
 }
 ```
+
+# Design Decisions
+
+- directed flow of data
+  - `libauth` passes data to you through `req.authn` via middleware
+  - You pass data to `libauth` by POST or by calling functions
 
 # Resources
 
