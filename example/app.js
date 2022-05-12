@@ -12,7 +12,10 @@ async function main() {
   let LibAuth = require("../");
   let issuer = process.env.BASE_URL || `http://localhost:${process.env.PORT}`;
   let privkey = JSON.parse(await Fs.readFile("./key.jwk.json", "utf8"));
-  let libauth = LibAuth.create(issuer, privkey, { DEVELOPMENT: false });
+  let libauth = LibAuth.create(issuer, privkey, {
+    DEVELOPMENT: false,
+    cookiePath: "/api/authn/",
+  });
 
   let DB = require("./db.js");
   let memstore = {
@@ -181,6 +184,34 @@ async function main() {
     },
   );
 
+  // TODO let gh = require('@libauth/github').create()
+  let oauth2Routes = libauth.oauth2({
+    "github.com": {
+      clientId: process.env.GITHUB_CLIENT_ID,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET,
+    },
+  });
+  let gh = oauth2Routes["github.com"];
+  // For exchanging an implicit-grant (browser-side) token
+  app.post("api/authn/session/oauth2/github.com", gh.exchangeToken);
+  // For exchanging a grant_type=code (redirect) code
+  // (set the url in GitHub Application Settings:
+  // <https://github.com/organizations/{{YOUR_ORG_HERE}}/settings/applications>)
+  app.get(
+    "/api/authn/webhooks/oauth2/github.com",
+    gh.exchangeCode,
+    gh.exchangeToken,
+    async function (req, res, next) {
+      let user = await DB.get({ github: req.authn.id });
+
+      req.authn.user = user;
+      next();
+    },
+  );
+  // Optional Helpers
+  app.get("/api/authn/webhooks/oauth2/github.com/emails", gh.emails);
+  app.get("/api/authn/webhooks/oauth2/github.com/userinfo", gh.userinfo);
+
   app.post(
     "/api/authn/refresh",
     libauth.refresh(),
@@ -205,17 +236,33 @@ async function main() {
     },
   );
 
+  // Logout (delete session cookie)
+  app.delete(
+    "/api/authn/session",
+    libauth.logout(),
+    async function (req, res, next) {
+      // TODO
+      // SessionsModel.delete(req.authn.jws.claims.jti);
+      res.json({ success: true });
+    },
+    async function (err, req, res, next) {
+      // they weren't logged in anyway
+      res.json({ success: true });
+    },
+  );
+
   app.use("/api/authn", async function (req, res) {
     let user = req.authn.user;
-    let allClaims = {
-      claims: {
-        sub: user.sub,
-        given_name: user.first_name,
-      },
+    let claims = {
+      sub: user.sub,
+      given_name: user.first_name,
     };
-    await libauth.grantCookieIfNewSession(req, res, allClaims);
-    let tokens = await libauth.grantTokens(allClaims);
-    res.json(tokens);
+    // TODO set refresh JTI in database
+    // TODO expire prior JTI
+    await libauth.setCookieIfNewSession(req, res, claims);
+    let id_token = await libauth.issueIdToken(claims);
+    let access_token = await libauth.issueAccessToken(claims);
+    res.json({ access_token, id_token });
   });
   app.use("/api/authn", async function (err, req, res, next) {
     res.statusCode = err.status || 500;
@@ -229,22 +276,6 @@ async function main() {
       message: err.message,
     });
   });
-
-  // Logout (delete session cookie)
-  app.delete(
-    "/api/authn/session",
-    libauth.logout(),
-    async function (req, res, next) {
-      // TODO
-      // SessionsModel.delete(req.authn.jws.claims.jti);
-      next();
-      res.json({ success: true });
-    },
-    async function (err, req, res, next) {
-      // they weren't logged in anyway
-      res.json({ success: true });
-    },
-  );
 
   // /.well-known/openid-configuration
   // /.well-known/jwks.json

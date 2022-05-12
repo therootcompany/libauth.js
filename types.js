@@ -111,14 +111,6 @@
  */
 
 /**
- * @typedef {any} MyAllClaims
- * @property {Claims} [claims]
- * @property {IdClaims} [id_claims]
- * @property {AccessClaims} [access_claims]
- * @property {RefreshClaims} [access_claims]
- */
-
-/**
  * @typedef {Object} OidcVerifyOpts
  * @property {string} [iss]
  * @property {string|boolean} [exp]
@@ -126,20 +118,14 @@
 
 /**
  * @typedef {Object} OidcMiddlewareOpts
- * @property {import('express').Router} app
  * @property {any} opts
  * @property {string} _issuerName
- * @property {function} _strategyHandler
- * @property {function} grantTokensAndCookie
  * @property {function} verifyOidcToken
  */
 
 /**
  * @typedef {Object} Oauth2MiddlewareOpts
- * @property {import('express').Router} app
  * @property {any} opts
- * @property {function} _strategyHandler
- * @property {function} grantTokensAndCookie
  */
 
 /**
