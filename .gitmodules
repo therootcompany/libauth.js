@@ -1,0 +1,3 @@
+[submodule "plugins/accounts.google.com"]
+	path = plugins/accounts.google.com
+	url = https://github.com/therootcompany/libauth.js-accounts.google.com
