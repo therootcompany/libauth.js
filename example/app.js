@@ -13,7 +13,6 @@ async function main() {
   let issuer = process.env.BASE_URL || `http://localhost:${process.env.PORT}`;
   let privkey = JSON.parse(await Fs.readFile("./key.jwk.json", "utf8"));
   let libauth = LibAuth.create(issuer, privkey, {
-    DEVELOPMENT: false,
     cookiePath: "/api/authn/",
   });
 
@@ -34,22 +33,6 @@ async function main() {
     maxAge: "24h",
     maxAttempts: 5,
   });
-
-  /*
-    // TODO MFA
-    let user = await DB.get({
-      email: email || (req.body && req.body.user),
-      ppid: ppid,
-      id: jws && jws.claims.sub,
-    });
-
-    let user = await DB.get({
-      id: jws && jws.claims.sub,
-    });
-    if (!user) {
-      throw new Error("TODO_NOT_FOUND");
-    }
-  */
 
   async function notify(vars) {
     //let vars = req.authn;
@@ -179,7 +162,6 @@ async function main() {
       let user = await DB.get({ ppid: req.authn.ppid });
 
       req.authn.user = user;
-      console.log("DEBUG got here 3!", req.authn);
       next();
     },
   );
