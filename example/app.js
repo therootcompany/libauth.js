@@ -37,8 +37,8 @@ async function main() {
   async function notify(vars) {
     //let vars = req.authn;
     // Notify via CLI
-    console.log(vars);
-    console.log({
+    console.info(vars);
+    console.info({
       subject: `Your Magic Link is here! ${vars.code}.`,
       text:
         `Enter this login code when prompted: ${vars.code}. \n` +
@@ -230,7 +230,6 @@ async function main() {
       let user = await DB.get({ id: req.authn.jws.claims.sub });
 
       req.authn.user = user;
-      //console.log("DEBUG refresh authn", req.authn);
       next();
     },
   );
@@ -262,7 +261,6 @@ async function main() {
   );
 
   app.use("/api/authn", async function (req, res) {
-    console.log("DEBUG", req.method, req.originalUrl);
     let user = req.authn.user;
     let claims = {
       sub: user.sub,
