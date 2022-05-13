@@ -151,12 +151,40 @@ async function main() {
     },
   );
 
-  let oidcRoutes = libauth.oidc({
-    "accounts.google.com": { clientId: process.env.GOOGLE_CLIENT_ID },
-  });
-  app.use(
+  let googleOidc = libauth.oidc(
+    require("../plugins/accounts.google.com/")({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      redirectUri: "/",
+    }),
+  );
+  app.get(
+    //"/api/authn/oidc/accounts.google.com/authorization_redirect",
+    "/api/authn/session/oidc/accounts.google.com/redirect",
+    googleOidc.authorizationRedirect,
+    googleOidc.exchangeCode,
+    googleOidc.exchangeToken,
+    async function (req, res, next) {
+      // get a new session
+      let user = await DB.get({ ppid: req.authn.ppid });
+
+      req.authn.user = user;
+
+      let claims = {
+        sub: user.sub,
+        given_name: user.first_name,
+      };
+      // TODO set refresh JTI in database
+      // TODO expire prior JTI
+      await libauth.setCookieIfNewSession(req, res, claims);
+
+      res.redirect(req.authn.redirect_uri);
+    },
+  );
+  app.post(
     "/api/authn/session/oidc/accounts.google.com",
-    oidcRoutes["accounts.google.com"],
+    googleOidc.exchangeToken,
+    //googleOidc.tokenRedirect,
     async function (req, res, next) {
       // get a new session
       let user = await DB.get({ ppid: req.authn.ppid });
@@ -202,7 +230,7 @@ async function main() {
       let user = await DB.get({ id: req.authn.jws.claims.sub });
 
       req.authn.user = user;
-      console.log("DEBUG refresh authn", req.authn);
+      //console.log("DEBUG refresh authn", req.authn);
       next();
     },
   );
@@ -234,6 +262,7 @@ async function main() {
   );
 
   app.use("/api/authn", async function (req, res) {
+    console.log("DEBUG", req.method, req.originalUrl);
     let user = req.authn.user;
     let claims = {
       sub: user.sub,
@@ -332,6 +361,9 @@ async function main() {
   // Error Handlers
   //
   app.use("/api/", function apiErrorHandler(err, req, res, next) {
+    if ("UNAUTHORIZED" === err.code) {
+      err.status = 401;
+    }
     if (!err.code) {
       next(err);
       return;
