@@ -178,8 +178,8 @@ async function main() {
       // TODO expire prior JTI
       await libauth.setCookieIfNewSession(req, res, claims);
 
-      // TODO doesn't need this here
-      res.redirect(req.authn.redirect_uri);
+      let search = new URLSearchParams(req.query).toString();
+      res.redirect(`/?${search}`);
     },
   );
   app.post(
