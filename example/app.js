@@ -155,7 +155,8 @@ async function main() {
     require("../plugins/accounts.google.com/")({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      redirectUri: "/",
+      // TODO handle url relative to issuer
+      //redirectUri: "/api/authn/session/oidc/accounts.google.com/redirect",
     }),
   );
   app.get(
