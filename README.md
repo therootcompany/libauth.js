@@ -1055,7 +1055,30 @@ Response
 }
 ```
 
-# Design Decisions
+# Philosophy
+
+The goal of LibAuth is to minimize _magic_ (anything difficult to understand or
+configure), and _maximize control_, without sacrificing _ease-of-use_ or
+convenience.
+
+To do this we require more copy-and-paste boilerplate than other auth
+libraries - with the upside is that it's all just normal, easy-to-replace
+_middleware_ - hopefully nothing unexpected or constraining.
+
+You'll also notice that we try to use the proper, official technical language
+rather than potentially ambiguous sugar-coated terms.
+
+## Glossary
+
+| Term            | Meaning                                                       |
+| --------------- | ------------------------------------------------------------- |
+| JWS             | A decoded JWT (non-compact JWS), or JSON Web Signature        |
+| JWT             | A compact (or encoded) JWS, or JSON Web Token                 |
+| `id_token`      | A JWT with information about the user, such `given_name`      |
+| `access_token`  | A JWT with information about an account or resource           |
+| `refresh_token` | A long-lived JWT, stored in a session cookie (or config file) |
+
+## Design Decisions
 
 - directed flow of data
   - `libauth` passes data to you through `req.authn` via middleware
