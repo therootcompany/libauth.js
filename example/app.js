@@ -89,33 +89,42 @@ async function main() {
     libauth.sendTokens(),
   );
 
-  app.post(
-    "/api/authn/challenge/order",
-    /*
+  /*
+    // TODO MFA
     async function checkForMfa(req, res, next) {
       let user = DB.get(...)
       //req.authn.state.mfa = user.requires_mfa;
       req.body.state.mfa = user.requires_mfa;
       next();
     },
-    */
+  */
+
+  // Magic Link
+  app.post(
+    "/api/authn/challenge/order",
+    magic.setOrderParams,
     magic.newLink,
-    MyDB.updateStatus,
+    magic.storeOrder,
     MyDB.notify,
-    magic.sendReceipt,
+    magic.sendOrder,
   );
+
   app.get(
     "/api/authn/challenge/status",
-    magic.getStatus,
-    MyDB.updateStatus,
+    magic.setOrderParams,
+    magic.getOrderById, // TODO status
     magic.checkStatus,
-    magic.sendStatus,
+    magic.sendReceipt,
   );
 
   app.post(
     // "/api/authn/session/magic/link",
     "/api/authn/challenge/finalize",
-    magic.exchange,
+    magic.setOrderParams,
+    magic.getOrderById, // TODO status
+    magic.verifyOrder,
+    magic.storeOrder,
+    magic.catchFailure,
     MyDB.getUserClaimsByIdentifier,
     libauth.newSession(),
     libauth.setClaims(),
@@ -124,24 +133,10 @@ async function main() {
     libauth.setCookieHeader(),
     libauth.sendTokens(),
   );
-  app.post(
-    // "/api/authn/session/magic/receipt",
-    "/api/authn/challenge/exchange",
-    magic.useReceipt,
-    async function (req, res, next) {
-      // get a new session
-      let user = await DB.get({
-        // TODO check if it's actually email!
-        email: req.authn.identifier.value,
-      });
 
-      req.authn.user = user;
-      next();
-    },
-  );
-
+  // Google Sign In
   let googleOidc = libauth.oidc(
-    require("../plugins/accounts.google.com/")({
+    require("../plugins/oidc-google/")({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       // TODO handle url relative to issuer
@@ -195,6 +190,7 @@ async function main() {
   });
   let gh = oauth2Routes["github.com"];
   */
+  /*
   // For exchanging an implicit-grant (browser-side) token
   app.post("api/authn/session/oauth2/github.com", gh.exchangeToken);
   // For exchanging a grant_type=code (redirect) code
@@ -214,6 +210,7 @@ async function main() {
   // Optional Helpers
   app.get("/api/authn/webhooks/oauth2/github.com/emails", gh.emails);
   app.get("/api/authn/webhooks/oauth2/github.com/userinfo", gh.userinfo);
+  */
 
   app.post(
     "/api/authn/refresh",
@@ -232,7 +229,7 @@ async function main() {
   app.delete(
     "/api/authn/session",
     libauth.getCookie(),
-    MyDB.updateSession(),
+    MyDB.updateSession,
     libauth.logout(),
     libauth.sendOk({ success: true }),
     libauth.sendError({ success: true }),
@@ -371,6 +368,28 @@ async function main() {
       locale: user.localeName,
     };
   }
+
+  MyDB.updateSession = async function (req, res, next) {
+    async function mw() {
+      // Invalidate the old session, if any
+      let sessionId = libauth.get(req, "sessionJws")?.claims?.jti;
+      if (sessionId) {
+        await DB.Session.set({ id: sessionId, deleted_at: new Date() });
+      }
+
+      // Save the new session
+      let newSessionClaims = libauth.get(req, "sessionClaims");
+      let newSessionId = newSessionClaims.jti;
+      let userId = newSessionClaims.sub;
+
+      await DB.Session.set({ id: newSessionId, user_id: userId });
+
+      next();
+    }
+
+    // (shim for adding await support to express)
+    Promise.resolve().then(mw).catch(next);
+  };
 
   MyDB.getUserClaimsById = async function (req, res, next) {
     let userId = libauth.get(req, "bearerClaims").sub;

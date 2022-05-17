@@ -31,8 +31,11 @@
 /**
  * @typedef Challenge
  * @property {number} attempts
- * @property {string} secret // TODO rename to code
+ * @property {string} id
  * @property {string} code
+ * @property {any} state
+ * @property {string} expires_at
+ * @property {string} duration
  * @property {string} ordered_at
  * @property {string} ordered_by // TODO rename _agent
  * @property {string} ordered_ip
