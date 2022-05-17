@@ -13,14 +13,16 @@ let request = require("@root/request");
  */
 
 /**
- * @param {Oauth2MiddlewareOpts & { _gh: any }} opts
+ * @param {any} libauth
+ * @param {any} libOpts
+ * @param {Oauth2MiddlewareOpts} pluginOpts
  */
-function create({ _gh, opts }) {
+function create(libauth, libOpts, pluginOpts) {
   /** @type {import('express').Handler} */
   async function exchangeGitHubToken(req, res, next) {
     //@ts-ignore
-    let authn = req[opts.authnParam];
-    let token = authn?.code_response?.access_token;
+    let codeResponse = libauth.get(req, "codeResponse");
+    let token = codeResponse?.access_token;
 
     if (!token) {
       token = (req.headers.authorization || "").replace(/^Bearer /, "");
@@ -64,7 +66,7 @@ function create({ _gh, opts }) {
     };
 
     //@ts-ignore
-    req[opts.authnParam] = {
+    libauth.set(req, {
       strategy: "oauth2",
       //@ts-ignore
       email: req._oauth2.email,
@@ -78,7 +80,7 @@ function create({ _gh, opts }) {
       id: req._oauth2.id, // TODO
       //@ts-ignore
       oauth2_profile: req._oauth2.profile,
-    };
+    });
 
     next();
   }
@@ -87,8 +89,8 @@ function create({ _gh, opts }) {
   async function exchangeCode(req, res, next) {
     // https://docs.github.com/en/developers/apps/building-oauth-apps/authorizing-oauth-apps#web-application-flow
 
-    let clientId = _gh.clientId;
-    let clientSecret = _gh.clientSecret;
+    let clientId = pluginOpts.clientId;
+    let clientSecret = pluginOpts.clientSecret;
     let code = req.query.code;
     // TODO check state
     //let state = req.query.state;
@@ -114,11 +116,11 @@ function create({ _gh, opts }) {
     });
 
     //@ts-ignore
-    req[opts.authnParam] = {
+    libauth.set(req, {
       strategy: "oauth2",
       // TODO what's the proper name?
-      code_response: details,
-    };
+      codeResponse: details,
+    });
 
     next();
   }
@@ -126,10 +128,10 @@ function create({ _gh, opts }) {
   // For redirecting the token directly back to the browser
   /** @type {import('express').Handler} */
   async function redirectToken(req, res) {
-    let form = req[opts.authnParam]?.code_response;
+    let form = libauth.get(req, "codeResponse");
     let search = new URLSearchParams(form).toString();
     // TODO issuer may not be 1:1 with return url
-    var loginUrl = _gh.loginUrl || opts.issuer;
+    var loginUrl = pluginOpts.loginUrl || libOpts.issuer;
     var url = new URL(
       `${loginUrl}#${search}&issuer=github.com&state=${req.query.state}`,
     );

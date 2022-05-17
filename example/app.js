@@ -17,6 +17,7 @@ async function main() {
   });
 
   let DB = require("./db.js");
+  let MyDB = {};
   let memstore = {
     _db: {},
     set: async function (id, val) {
@@ -28,7 +29,7 @@ async function main() {
   };
 
   // Magic Link (challenge-based auth)
-  let challengeRoutes = libauth.challenge({
+  let magic = libauth.challenge({
     store: memstore,
     maxAge: "24h",
     maxAttempts: 5,
@@ -66,34 +67,26 @@ async function main() {
   let cookieSecret = process.env.HMAC_SECRET || process.env.COOKIE_SECRET;
   app.use("/api/authn", cookieParser(cookieSecret)); // needed to set cookies?
 
-  // TODO
+  //
+  // /api/session/token/
+  //
+  // /api/session/credentials/token
+  // /api/redirect/oidc/accounts.google.com/auth
+  // /api/session/oidc/accounts.google.com/code
+  // /api/session/oidc/accounts.google.com/token
+
+  app.use("/api/authn/", libauth.initialize());
+
   app.post(
     "/api/authn/session/credentials",
-    libauth.credentials(/*{
-      // Defaults
-      basic: true,
-      username: "username",
-      password: "password",
-    }*/),
-    async function (req, res, next) {
-      // TODO assertSecureCompare?
-      req.authn.valid = libauth.secureCompare(
-        req.authn.password,
-        "my-password",
-        6,
-      );
-      if (!req.authn.valid) {
-        let err = new Error("password is too short or doesn't match");
-        err.code = "E_CREDENTIALS_INVALID";
-        err.status = 400;
-        throw err;
-      }
-
-      // Note: the behavior of send-magic-link-on-auth-failure
-      // belongs to the client side
-
-      next();
-    },
+    libauth.credentials(),
+    MyDB.getUserClaimsByPassword,
+    libauth.newSession(),
+    libauth.setClaims(),
+    libauth.setTokens(),
+    libauth.setCookie(),
+    libauth.setCookieHeader(),
+    libauth.sendTokens(),
   );
 
   app.post(
@@ -106,39 +99,35 @@ async function main() {
       next();
     },
     */
-    challengeRoutes.order,
-    async function (req, res) {
-      await notify(req.authn);
-      res.json(req.authn.order);
-    },
+    magic.newLink,
+    MyDB.updateStatus,
+    MyDB.notify,
+    magic.sendReceipt,
   );
   app.get(
     "/api/authn/challenge/status",
-    challengeRoutes.checkStatus,
-    function (req, res) {
-      res.json(req.authn.status);
-    },
+    magic.getStatus,
+    MyDB.updateStatus,
+    magic.checkStatus,
+    magic.sendStatus,
   );
 
   app.post(
     // "/api/authn/session/magic/link",
     "/api/authn/challenge/finalize",
-    challengeRoutes.useCode,
-    async function (req, res, next) {
-      // get a new session
-      let user = await DB.get({
-        // TODO check if it's actually email!
-        email: req.authn.identifier.value,
-      });
-
-      req.authn.user = user;
-      next();
-    },
+    magic.exchange,
+    MyDB.getUserClaimsByIdentifier,
+    libauth.newSession(),
+    libauth.setClaims(),
+    libauth.setTokens(),
+    libauth.setCookie(),
+    libauth.setCookieHeader(),
+    libauth.sendTokens(),
   );
   app.post(
     // "/api/authn/session/magic/receipt",
     "/api/authn/challenge/exchange",
-    challengeRoutes.useReceipt,
+    magic.useReceipt,
     async function (req, res, next) {
       // get a new session
       let user = await DB.get({
@@ -197,6 +186,7 @@ async function main() {
   );
 
   // TODO let gh = require('@libauth/github').create()
+  /*
   let oauth2Routes = libauth.oauth2({
     "github.com": {
       clientId: process.env.GITHUB_CLIENT_ID,
@@ -204,6 +194,7 @@ async function main() {
     },
   });
   let gh = oauth2Routes["github.com"];
+  */
   // For exchanging an implicit-grant (browser-side) token
   app.post("api/authn/session/oauth2/github.com", gh.exchangeToken);
   // For exchanging a grant_type=code (redirect) code
@@ -235,46 +226,18 @@ async function main() {
       next();
     },
   );
-  app.post(
-    "/api/authn/exchange",
-    libauth.exchange(),
-    async function (req, res, next) {
-      // get a new access token from an ID token (or refresh token?)
-      let user = await DB.get({ id: req.authn.jws.claims.sub });
-
-      req.authn.user = user;
-      next();
-    },
-  );
+  app.post("/api/authn/exchange", libauth.exchange(), MyDB.getUserClaimsById);
 
   // Logout (delete session cookie)
   app.delete(
     "/api/authn/session",
+    libauth.getCookie(),
+    MyDB.updateSession(),
     libauth.logout(),
-    async function (req, res, next) {
-      // TODO
-      // SessionsModel.delete(req.authn.jws.claims.jti);
-      res.json({ success: true });
-    },
-    async function (err, req, res, next) {
-      // they weren't logged in anyway
-      res.json({ success: true });
-    },
+    libauth.sendOk({ success: true }),
+    libauth.sendError({ success: true }),
   );
 
-  app.use("/api/authn", async function (req, res) {
-    let user = req.authn.user;
-    let claims = {
-      sub: user.sub,
-      given_name: user.first_name,
-    };
-    // TODO set refresh JTI in database
-    // TODO expire prior JTI
-    await libauth.setCookieIfNewSession(req, res, claims);
-    let id_token = await libauth.issueIdToken(claims);
-    let access_token = await libauth.issueAccessToken(claims);
-    res.json({ access_token, id_token });
-  });
   app.use("/api/authn", async function (err, req, res, next) {
     res.statusCode = err.status || 500;
     if (500 == res.statusCode) {
@@ -288,16 +251,14 @@ async function main() {
     });
   });
 
-  // /.well-known/openid-configuration
-  // /.well-known/jwks.json
-  app.use("/", libauth.wellKnown());
+  app.use("/.well-known/openid-configuration", libauth.wellKnownOidc());
+  app.use("/.well-known/jwks.json", libauth.wellKnownJwks());
 
   //
   // API Middleware & Handlers
   //
   let authenticate = require("../middleware/");
   app.use("/api", authenticate({ iss: issuer, optional: true }));
-
   app.use("/api", function _authz(req, res, next) {
     if (!req.user) {
       // TODO bad idea
@@ -311,6 +272,7 @@ async function main() {
     }
     next();
   });
+
   if ("DEVELOPMENT" === process.env.ENV) {
     app.use("/api/debug/inspect", function (req, res) {
       res.json({ success: true, user: req.user || null });
@@ -393,6 +355,73 @@ async function main() {
     res.statusCode = 500;
     res.end("Internal Server Error");
   });
+
+  function userToClaims(user) {
+    return {
+      // "Subject" the user ID or Pairwise ID (required)
+      sub: user.id,
+
+      // ID Token Info (optional)
+      given_name: user.first_name,
+      family_name: user.first_name,
+      picture: user.photo_url,
+      email: user.email,
+      email_verified: user.email_verified_at || false,
+      zoneinfo: user.timezoneName,
+      locale: user.localeName,
+    };
+  }
+
+  MyDB.getUserClaimsById = async function (req, res, next) {
+    let userId = libauth.get(req, "bearerClaims").sub;
+
+    // get a new access token from an ID token (or refresh token?)
+    let user = await DB.get({ id: userId });
+
+    let idClaims = userToClaims(user);
+    libauth.set(req, { idClaims: idClaims, accessClaims: {} });
+
+    next();
+  };
+
+  MyDB.getUserClaimsByIdentifier = async function (req, res, next) {
+    let email = libauth.get(req, "identifier").value;
+
+    // get a new session
+    // TODO check if it's actually email!
+    let user = await DB.get({ email: email });
+
+    let idClaims = userToClaims(user);
+    libauth.set(req, { idClaims: idClaims, accessClaims: {} });
+
+    next();
+  };
+
+  MyDB.getUserClaimsByPassword = async function (req, res, next) {
+    let creds = libauth.get(req, "credentials");
+    let user = await DB.get({ email: creds.email });
+
+    // TODO assertSecureCompare?
+    let valid = libauth.secureCompare(
+      creds.password,
+      //user.password,
+      "my-password",
+      6,
+    );
+    if (!valid) {
+      // Note: the behavior of send-magic-link-on-auth-failure
+      // belongs to the client side
+      let err = new Error("password is too short or doesn't match");
+      err.code = "E_CREDENTIALS_INVALID";
+      err.status = 400;
+      throw err;
+    }
+
+    let idClaims = userToClaims(user);
+    libauth.set(req, { idClaims: idClaims, accessClaims: {} });
+
+    next();
+  };
 
   // Dev / Localhost Local File Server
   if ("DEVELOPMENT" === process.env.ENV) {

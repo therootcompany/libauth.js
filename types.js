@@ -125,7 +125,8 @@
 
 /**
  * @typedef {Object} Oauth2MiddlewareOpts
- * @property {any} opts
+ * @property {String} clientId
+ * @property {String} clientSecret
  */
 
 /**
