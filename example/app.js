@@ -189,7 +189,7 @@ async function main() {
   // /api/session/oidc/accounts.google.com/code
   // /api/session/oidc/accounts.google.com/token
 
-  app.use("/api/authn/", libauth.initialize());
+  //app.use("/api/authn/", libauth.initialize());
 
   app.post(
     "/api/authn/session/credentials",
@@ -199,6 +199,7 @@ async function main() {
     libauth.setClaims(),
     libauth.setTokens(),
     libauth.setCookie(),
+    MyDB.updateSession,
     libauth.setCookieHeader(),
     libauth.sendTokens(),
   );
@@ -244,6 +245,7 @@ async function main() {
     libauth.setClaims(),
     libauth.setTokens(),
     libauth.setCookie(),
+    MyDB.updateSession,
     libauth.setCookieHeader(),
     libauth.sendTokens(),
   );
@@ -333,6 +335,7 @@ async function main() {
   */
 
   app.post(
+    // "/api/session/token",
     "/api/authn/refresh",
     libauth.getCookie(),
     //libauth.verifySession(),
@@ -353,6 +356,7 @@ async function main() {
 
   // Logout (delete session cookie)
   app.delete(
+    // "/api/session",
     "/api/authn/session",
     libauth.getCookie(),
     MyDB.updateSession,
