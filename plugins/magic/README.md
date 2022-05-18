@@ -1,9 +1,12 @@
 # @libauth/magic
 
-"Magic Link" a.k.a. "Second Factor" Sign In for LibAuth.js
+"Magic Link" Sign In for LibAuth.js (for Email links & SMS codes)
 
-Note: We're against 🚫 🧙‍♂️ wizardry, in general. "Magic Link" is a technical term
-referring to the UX pattern used by Medium, Slack, and many others.
+Also known as _Challenge-Response_ or _Second Factor_ authentication - meaning
+you can send the answer to the challenge however you like.
+
+Note: We're against 🚫 🧙‍♂️ wizardry. "Magic Link" is a technical term referring
+to the UX pattern used by Medium, Slack, and many others.
 
 ## Install
 
@@ -21,20 +24,21 @@ users.
 
 ### Protecting your Credentials
 
-Don't commit your email or SMS credentials to code.
+Don't commit your Salt or email or SMS credentials to code.
 
 Rather use a `.env` for local development and servers, or the _Environment
 Configuration_ (or _Secrets Vault_) of your CI/CD service.
 
-For example, if you use Postmark:
+For example:
 
 `.env`:
 
 ```bash
-# Found at https://console.developers.google.com/apis/dashboard
+# Generated with crypto.randomBytes(16).toString('hex')
+MAGIC_SALT='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+
+# Found at https://account.postmarkapp.com/servers/{ID}/streams/{NAME}/settings
 POSTMARK_SERVER_TOKEN=xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx
-POSTMARK_STREAM_ID=dev-transactional
-POSTMARK_STREAM_FROM=account@dev-service.example.com
 ```
 
 ```js
@@ -60,20 +64,17 @@ _middleware_ - hopefully nothing 🤔 unexpected or ⛓ constraining.
 
 let magicLink = libauth.challenge(
   require("@libauth/magic")({
-    code: {
-      minChars: 9,
-      encoding: magicLink.Base62,
-    },
+    codes: require("@libauth/magic/generator").create({
+      magicSalt: process.env.MAGIC_SALT,
+    }),
     store: {
-      get: async function (orderId) {
-        return await DB.MagicLinks.set(orderId);
+      get: async function ({ id }) {
+        return await DB.MagicLinks.get(orderId);
       },
-      set: async function (orderId, details) {
-        //
-        await DB.MagicLinks.set(orderId, details);
+      set: async function (challenge) {
+        await DB.MagicLinks.set(challenge);
       },
     },
-    magicSalt: "xxxxxxxxxx",
   }),
 );
 ```
@@ -81,46 +82,63 @@ let magicLink = libauth.challenge(
 ```js
 // Create an "order", and send the notification
 app.post(
-  "/api/session/magic/order",
-  MyDB.getUserByIdentifier,
-  magicLink.parseParams,
-  magicLink.newMagicLink,
-  magicLink.saveOrder,
+  "/api/authn/challenge",
+  magicLink.setParams,
+  MyDB.getUserByMagicValue,
+  magicLink.generateChallenge,
+  magicLink.saveChallenge,
   MyNotifier.notify,
   magicLink.sendReceipt,
 );
 
 // Check the status of the order
 app.get(
-  "/api/session/magic/status",
-  magicLink.parseParams,
-  magicLink.getStatus,
-  magicLink.check,
+  "/api/authn/challenge/:id",
+  magicLink.setParams,
+  magicLink.getChallenge,
+  magicLink.checkStatus,
   magicLink.sendStatus,
+
+  // Error Handler
+  magicLink.captureError,
+  magicLink.saveChallenge,
+  magicLink.releaseError,
+  libauth.sendError(),
 );
 
-// Redeem the code (or receipt) for a token
+// Exchange the the code (or receipt) for a new session and token
 app.post(
-  "/api/session/magic/token",
-  magicLink.parseParams,
-  magicLink.getStatus,
-  magicLink.check,
-  magicLink.incrementOnRetry,
-  magicLink.exchange,
-  magicLink.saveOrder,
+  "/api/session/challenge",
+
+  // Handle challenge response
+  magicLink.setParams,
+  magicLink.getChallenge,
+  magicLink.verifyResponse,
+  magicLink.saveChallenge,
+
+  // Handle success
   MyDB.getUserByIdentifier,
-  libauth.setClaims,
-  libauth.setCookie,
-  libauth.setCookieHeader,
-  libauth.setTokens,
-  libauth.sendTokens,
+  libauth.newSession(),
+  libauth.setClaims(),
+  libauth.setCookie(),
+  MyDB.updateSessionId,
+  libauth.setCookieHeader(),
+  libauth.setTokens(),
+  libauth.sendTokens(),
+
+  // Handle error
+  magicLink.captureError,
+  magicLink.saveChallenge,
+  magicLink.releaseError,
+  libauth.sendError(),
 );
 
 // Invalidate the auth challenge
 app.delete(
-  "/api/session/magic/order/:id",
-  magicLink.cancelOrder,
-  magicLink.saveOrder,
+  "/api/authn/challenge/:id",
+  magicLink.setParams,
+  magicLink.cancelChallenge,
+  magicLink.saveChallenge,
   magicLink.sendStatus,
 );
 ```
@@ -202,6 +220,6 @@ git submodule update
 ```
 
 ```bash
-pushd ./plugins/oidc-google/
+pushd ./plugins/magic/
 git checkout main
 ```

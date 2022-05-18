@@ -182,10 +182,9 @@
 
 /**
  * @typedef MagicAssertOpts
- * @property {Boolean} requireUnusedCode
- * @property {Boolean} requireUnusedReceipt
- * @property {Boolean} requireExchange
  * @property {Boolean} [failedValidation]
+ * @property {Boolean} requireExchange
+ * @property {Number} [timestamp]
  */
 
 /**
@@ -229,6 +228,7 @@
 /**
  * @typedef MagicStatus
  * @property {String} id
+ * @property {String} [receipt]
  * @property {String} status
  * @property {any} [state]
  * @property {String} [duration]

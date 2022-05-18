@@ -21,7 +21,7 @@
     window.alert(
       "Oops! There was an unexpected error on the server.\nIt's not your fault.\n\n" +
         "Technical Details for Tech Support: \n" +
-        err.message
+        err.message,
     );
     throw err;
   }
@@ -47,7 +47,7 @@
     client_id,
     redirect_uri,
     scope,
-    login_hint
+    login_hint,
   ) {
     // a secure-enough random state value
     // (all modern browsers use crypto random Math.random, not that it much matters for a client-side state cache)
@@ -73,7 +73,7 @@
     client_id,
     redirect_uri,
     scopes,
-    login_hint
+    login_hint,
   ) {
     // <!-- redirect_uri=encodeURIComponent("https://beyondcode.duckdns.org/api/webhooks/oauth2/github") -->
     // <!-- scope=encodeURIComponent("read:user%20user:email") -->
@@ -182,7 +182,7 @@
       "https://accounts.google.com/o/oauth2/v2/auth",
       ENV.GOOGLE_CLIENT_ID,
       ENV.GOOGLE_REDIRECT_URI,
-      "email profile"
+      "email profile",
       // "JOHN.DOE@EXAMPLE.COM"
     );
     $(".js-google-oidc-url").href = googleSignInUrl;
@@ -191,7 +191,7 @@
       "https://github.com/login/oauth/authorize",
       ENV.GITHUB_CLIENT_ID,
       ENV.GITHUB_REDIRECT_URI,
-      ["read:user", "user:email"]
+      ["read:user", "user:email"],
     );
     $(".js-github-oauth2-url").href = githubSignInUrl;
 
@@ -238,7 +238,7 @@
     window.history.pushState(
       "",
       document.title,
-      window.location.pathname + window.location.search
+      window.location.pathname + window.location.search,
     );
 
     // Show the token for easy capture
@@ -255,7 +255,7 @@
             language: window.navigator.language,
           }),
           headers: {
-            Authorization: query.access_token,
+            Authorization: `Bearer ${query.access_token}`,
             "Content-Type": "application/json",
           },
         })
@@ -275,7 +275,7 @@
     window.history.pushState(
       "",
       document.title,
-      window.location.pathname + window.location.search
+      window.location.pathname + window.location.search,
     );
 
     // Show the token for easy capture
@@ -285,11 +285,13 @@
 
     if ("https://accounts.google.com" === jws.claims.iss) {
       // TODO make sure we've got the right options for fetch !!!
+      //let tokenUrl = "/api/authn/session/oidc/accounts.google.com";
+      let tokenUrl = "/api/authn/session/oidc/accounts.google.com/token";
       let resp = await window
-        .fetch(baseUrl + "/api/authn/session/oidc/accounts.google.com", {
+        .fetch(`${baseUrl}${tokenUrl}`, {
           method: "POST",
           headers: {
-            authorization: query.id_token,
+            Authorization: `Bearer ${query.id_token}`,
           },
         })
         .catch(die);

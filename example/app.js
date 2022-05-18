@@ -17,13 +17,126 @@ async function main() {
   });
 
   let DB = require("./db.js");
+
   let MyDB = {};
+  function userToClaims(user) {
+    return {
+      // "Subject" the user ID or Pairwise ID (required)
+      sub: user.sub || user.id,
+
+      // ID Token Info (optional)
+      given_name: user.first_name,
+      family_name: user.first_name,
+      picture: user.photo_url,
+      email: user.email,
+      email_verified: user.email_verified_at || false,
+      zoneinfo: user.timezoneName,
+      locale: user.localeName,
+    };
+  }
+
+  MyDB.updateSession = async function (req, res, next) {
+    async function mw() {
+      // Invalidate the old session, if any
+      let sessionId = libauth.get(req, "currentSessionClaims")?.jti;
+      if (sessionId) {
+        //await DB.Session.set({ id: sessionId, deleted_at: new Date() });
+      }
+
+      // Save the new session
+      let newSessionClaims = libauth.get(req, "sessionClaims");
+      let newSessionId = newSessionClaims.jti;
+      let userId = newSessionClaims.sub;
+
+      //await DB.Session.set({ id: newSessionId, user_id: userId });
+
+      next();
+    }
+
+    // (shim for adding await support to express)
+    Promise.resolve().then(mw).catch(next);
+  };
+
+  MyDB.getUserClaimsByBearer = async function (req, res, next) {
+    let userId = libauth.get(req, "bearerClaims").sub;
+
+    // get a new access token from an ID token (or refresh token?)
+    let user = await DB.get({ id: userId });
+
+    let accessClaims = userToClaims(user);
+    libauth.set(req, { accessClaims });
+
+    next();
+  };
+
+  MyDB.getUserClaimsBySession = async function (req, res, next) {
+    let userId = libauth.get(req, "sessionClaims").sub;
+
+    // get a new access token from an ID token (or refresh token?)
+    let user = await DB.get({ id: userId });
+
+    let idClaims = userToClaims(user);
+    libauth.set(req, { idClaims });
+
+    next();
+  };
+
+  MyDB.getUserClaimsByIdentifier = async function (req, res, next) {
+    let email = libauth.get(req, "identifier").value;
+
+    // get a new session
+    // TODO check if it's actually email!
+    let user = await DB.get({ email: email });
+
+    let idClaims = userToClaims(user);
+    libauth.set(req, { idClaims: idClaims, accessClaims: {} });
+
+    next();
+  };
+
+  MyDB.getUserClaimsByPassword = async function (req, res, next) {
+    let creds = libauth.get(req, "credentials");
+    let user = await DB.get({ email: creds.email });
+
+    // TODO assertSecureCompare?
+    let valid = libauth.secureCompare(
+      creds.password,
+      //user.password,
+      "my-password",
+      6,
+    );
+    if (!valid) {
+      // Note: the behavior of send-magic-link-on-auth-failure
+      // belongs to the client side
+      let err = new Error("password is too short or doesn't match");
+      err.code = "E_CREDENTIALS_INVALID";
+      err.status = 400;
+      throw err;
+    }
+
+    let idClaims = userToClaims(user);
+    libauth.set(req, { idClaims: idClaims, accessClaims: {} });
+
+    next();
+  };
+
+  MyDB.getUserClaimsByOidcEmail = async function (req, res, next) {
+    let email = libauth.get(req, "email");
+    let user = await DB.get({ email: email });
+
+    let idClaims = userToClaims(user);
+    console.log("[DEBUG] getUserClaimsByOidcEmail", email, user, idClaims);
+    libauth.set(req, { idClaims: idClaims, accessClaims: {} });
+
+    next();
+  };
+
   let memstore = {
     _db: {},
-    set: async function (id, val) {
-      memstore._db[id] = val;
+    set: async function (challenge) {
+      memstore._db[challenge.id] = challenge;
     },
-    get: async function (id) {
+    get: async function ({ id }) {
       return memstore._db[id];
     },
   };
@@ -31,7 +144,7 @@ async function main() {
   // Magic Link (challenge-based auth)
   let magic = libauth.challenge({
     store: memstore,
-    maxAge: "24h",
+    duration: "24h",
     maxAttempts: 5,
     magicSalt: privkey.d,
   });
@@ -54,7 +167,7 @@ async function main() {
   }
 
   // Dev / Localhost Stuff
-  if ("DEVELOPMENT" === process.env.ENV) {
+  if ("DEVELOPMENT" === process.env.NODE_ENV) {
     // more logging
     let morgan = require("morgan");
     app.use("/", morgan("tiny"));
@@ -120,7 +233,7 @@ async function main() {
 
   app.post(
     // "/api/authn/session/magic/link",
-    "/api/authn/challenge/finalize",
+    "/api/authn/session/challenge",
     magic.setOrderParams,
     magic.getOrderById, // TODO status
     magic.verifyOrder,
@@ -137,48 +250,54 @@ async function main() {
 
   // Google Sign In
   let googleOidc = libauth.oidc(
+    //require("@libauth/oidc-google")
     require("../plugins/oidc-google/")({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      // TODO handle url relative to issuer
-      //redirectUri: "/api/authn/session/oidc/accounts.google.com/redirect",
+      //redirectUri: "/api/session/oidc/accounts.google.com/code",
+      redirectUri: "/api/authn/session/oidc/accounts.google.com/redirect",
     }),
   );
+
+  //
+  // For 'Authorization Code' (Server-Side Redirects) Flow
+  // (requires `clientId` and `clientSecret`)
+  //
   app.get(
-    //"/api/authn/oidc/accounts.google.com/authorization_redirect",
-    "/api/authn/session/oidc/accounts.google.com/redirect",
-    googleOidc.authorizationRedirect,
-    googleOidc.exchangeCode,
-    googleOidc.exchangeToken,
-    async function (req, res, next) {
-      // get a new session
-      let user = await DB.get({ ppid: req.authn.ppid });
-
-      req.authn.user = user;
-
-      let claims = {
-        sub: user.sub,
-        given_name: user.first_name,
-      };
-      // TODO set refresh JTI in database
-      // TODO expire prior JTI
-      await libauth.setCookieIfNewSession(req, res, claims);
-
-      let search = new URLSearchParams(req.query).toString();
-      res.redirect(`/?${search}`);
-    },
+    "/api/authn/oidc/accounts.google.com/auth",
+    googleOidc.setAuthUrl,
+    googleOidc.redirectToAuthUrl,
   );
-  app.post(
-    "/api/authn/session/oidc/accounts.google.com",
-    googleOidc.exchangeToken,
-    //googleOidc.tokenRedirect,
-    async function (req, res, next) {
-      // get a new session
-      let user = await DB.get({ ppid: req.authn.ppid });
+  app.get(
+    //"/api/session/oidc/accounts.google.com/code",
+    "/api/authn/session/oidc/accounts.google.com/redirect",
+    googleOidc.exchangeCode,
+    googleOidc.verifyToken,
+    MyDB.getUserClaimsByOidcEmail,
+    libauth.newSession(),
+    libauth.setClaims(),
+    libauth.setTokens(),
+    libauth.setCookie(),
+    MyDB.updateSession,
+    libauth.setCookieHeader(),
+    libauth.redirectWithTokens("/my-account"),
+  );
 
-      req.authn.user = user;
-      next();
-    },
+  //
+  // For 'Implicit Grant' (Client-Side) Flow
+  // (requires `clientId` only)
+  //
+  app.post(
+    "/api/authn/session/oidc/accounts.google.com/token",
+    googleOidc.verifyToken,
+    MyDB.getUserClaimsByOidcEmail,
+    libauth.newSession(),
+    libauth.setClaims(),
+    libauth.setCookie(),
+    libauth.setTokens(),
+    MyDB.updateSession,
+    libauth.setCookieHeader(),
+    libauth.sendTokens(),
   );
 
   // TODO let gh = require('@libauth/github').create()
@@ -215,16 +334,22 @@ async function main() {
 
   app.post(
     "/api/authn/refresh",
-    libauth.refresh(),
-    async function (req, res, next) {
-      // get a new id token from a refresh token
-      let user = await DB.get({ id: req.authn.jws.claims.sub });
-
-      req.authn.user = user;
-      next();
-    },
+    libauth.getCookie(),
+    //libauth.verifySession(),
+    libauth.refresh(), // TODO refreshIdToken, verifySession
+    libauth.setClaims(),
+    libauth.setTokens(),
+    libauth.sendTokens(),
   );
-  app.post("/api/authn/exchange", libauth.exchange(), MyDB.getUserClaimsById);
+
+  app.post(
+    "/api/authn/exchange",
+    //libauth.verifyBearerToken(),
+    libauth.exchange(), // TODO verifyBearer
+    libauth.setClaims(),
+    libauth.setTokens(),
+    libauth.sendTokens(),
+  );
 
   // Logout (delete session cookie)
   app.delete(
@@ -271,7 +396,7 @@ async function main() {
     next();
   });
 
-  if ("DEVELOPMENT" === process.env.ENV) {
+  if ("DEVELOPMENT" === process.env.NODE_ENV) {
     app.use("/api/debug/inspect", function (req, res) {
       res.json({ success: true, user: req.user || null });
     });
@@ -354,97 +479,8 @@ async function main() {
     res.end("Internal Server Error");
   });
 
-  function userToClaims(user) {
-    return {
-      // "Subject" the user ID or Pairwise ID (required)
-      sub: user.id,
-
-      // ID Token Info (optional)
-      given_name: user.first_name,
-      family_name: user.first_name,
-      picture: user.photo_url,
-      email: user.email,
-      email_verified: user.email_verified_at || false,
-      zoneinfo: user.timezoneName,
-      locale: user.localeName,
-    };
-  }
-
-  MyDB.updateSession = async function (req, res, next) {
-    async function mw() {
-      // Invalidate the old session, if any
-      let sessionId = libauth.get(req, "sessionJws")?.claims?.jti;
-      if (sessionId) {
-        await DB.Session.set({ id: sessionId, deleted_at: new Date() });
-      }
-
-      // Save the new session
-      let newSessionClaims = libauth.get(req, "sessionClaims");
-      let newSessionId = newSessionClaims.jti;
-      let userId = newSessionClaims.sub;
-
-      await DB.Session.set({ id: newSessionId, user_id: userId });
-
-      next();
-    }
-
-    // (shim for adding await support to express)
-    Promise.resolve().then(mw).catch(next);
-  };
-
-  MyDB.getUserClaimsById = async function (req, res, next) {
-    let userId = libauth.get(req, "bearerClaims").sub;
-
-    // get a new access token from an ID token (or refresh token?)
-    let user = await DB.get({ id: userId });
-
-    let idClaims = userToClaims(user);
-    libauth.set(req, { idClaims: idClaims, accessClaims: {} });
-
-    next();
-  };
-
-  MyDB.getUserClaimsByIdentifier = async function (req, res, next) {
-    let email = libauth.get(req, "identifier").value;
-
-    // get a new session
-    // TODO check if it's actually email!
-    let user = await DB.get({ email: email });
-
-    let idClaims = userToClaims(user);
-    libauth.set(req, { idClaims: idClaims, accessClaims: {} });
-
-    next();
-  };
-
-  MyDB.getUserClaimsByPassword = async function (req, res, next) {
-    let creds = libauth.get(req, "credentials");
-    let user = await DB.get({ email: creds.email });
-
-    // TODO assertSecureCompare?
-    let valid = libauth.secureCompare(
-      creds.password,
-      //user.password,
-      "my-password",
-      6,
-    );
-    if (!valid) {
-      // Note: the behavior of send-magic-link-on-auth-failure
-      // belongs to the client side
-      let err = new Error("password is too short or doesn't match");
-      err.code = "E_CREDENTIALS_INVALID";
-      err.status = 400;
-      throw err;
-    }
-
-    let idClaims = userToClaims(user);
-    libauth.set(req, { idClaims: idClaims, accessClaims: {} });
-
-    next();
-  };
-
   // Dev / Localhost Local File Server
-  if ("DEVELOPMENT" === process.env.ENV) {
+  if ("DEVELOPMENT" === process.env.NODE_ENV) {
     let path = require("path");
     app.use("/", express.static(path.join(__dirname, "../public")));
   }
