@@ -29,28 +29,6 @@
  */
 
 /**
- * @typedef Challenge
- * @property {number} attempts
- * @property {string} secret // TODO rename to code
- * @property {string} code
- * @property {string} ordered_at
- * @property {string} ordered_by // TODO rename _agent
- * @property {string} ordered_ip
- * @property {string} verified_at // RFC3339 / ISO Timestamp
- * @property {string} verified_by
- * @property {string} verified_ip
- * @property {string} exchanged_at
- * @property {string} exchanged_by
- * @property {string} exchanged_ip
- * @property {string} canceled_at
- * @property {string} canceled_by
- * @property {string} canceled_ip
- * @property {string} deleted_at
- * @property {string} type // such as 'email' or 'tel'
- * @property {string} value // such as 'me@example.com'
- */
-
-/**
  * @typedef {Object} JwsPriv
  * @property {string} d
  * @property {string} [dp]
@@ -111,34 +89,22 @@
  */
 
 /**
- * @typedef {any} MyAllClaims
- * @property {Claims} [claims]
- * @property {IdClaims} [id_claims]
- * @property {AccessClaims} [access_claims]
- * @property {RefreshClaims} [access_claims]
- */
-
-/**
  * @typedef {Object} OidcVerifyOpts
- * @property {string} [iss]
+ * @property {function|boolean} [verify]
+ * @property {function|boolean} [pluginVerify]
+ * @property {string|boolean} [iss]
+ * @property {string|boolean} [sub]
+ * @property {string|boolean} [aud]
+ * @property {string|boolean} [azp]
  * @property {string|boolean} [exp]
- */
-
-/**
- * @typedef {Object} OidcMiddlewareOpts
- * @property {import('express').Router} app
- * @property {any} opts
- * @property {function} _strategyHandler
- * @property {function} grantTokensAndCookie
- * @property {function} verifyOidcToken
+ * @property {string|boolean} [email]
+ * @property {boolean} [email_verified]
  */
 
 /**
  * @typedef {Object} Oauth2MiddlewareOpts
- * @property {import('express').Router} app
- * @property {any} opts
- * @property {function} _strategyHandler
- * @property {function} grantTokensAndCookie
+ * @property {String} clientId
+ * @property {String} clientSecret
  */
 
 /**
@@ -149,4 +115,135 @@
  * @property {string} [userParam]
  * @property {string} [claimsParam]
  * @property {string} [jwsParam]
+ */
+
+/**
+ * The Magic Code Generator
+ * @namespace MagicCodeGen
+ */
+
+/**
+ * Finalizes and returns the "Magic Link" within the login flow.
+ * @memberof MagicCodeGen
+ * @name generate
+ * @function
+ * @param {Number} codeBytes
+ * @param {String} codeEnc
+ * @param {Number} idBytes
+ * @param {String} idEnc
+ * @return {MagicParts}
+ */
+
+/**
+ * Finalizes and returns the "Magic Link" within the login flow.
+ * @memberof MagicCodeGen
+ * @name verify
+ * @function
+ * @param {MagicOrder} order
+ * @param {String} code
+ * @return {Boolean}
+ */
+
+/**
+ * @typedef MagicIdentifier
+ * @property {String} [issuer]
+ * @property {String} [type]
+ * @property {String} [value]
+ */
+
+/**
+ * @typedef MagicRequest
+ * @property {MagicIdentifier} identifier
+ * @property {any} state
+ */
+
+/**
+ * @typedef MagicDevice
+ * @property {String} ip
+ * @property {String} userAgent
+ */
+
+/**
+ * @typedef MagicParams
+ * @property {String} id
+ * @property {String} [code]
+ * @property {String} [receipt]
+ * @property {Boolean} [finalize]
+ * @property {MagicRequest} [request]
+ * @property {MagicDevice} device
+ */
+
+/**
+ * @typedef MagicParts
+ * @property {String} id
+ * @property {String} code
+ * @property {String} receipt
+ */
+
+/**
+ * @typedef MagicAssertOpts
+ * @property {Boolean} requireUnusedCode
+ * @property {Boolean} requireUnusedReceipt
+ * @property {Boolean} requireExchange
+ * @property {Boolean} [failedValidation]
+ */
+
+/**
+ * @typedef MagicVerifierOpts
+ * @property {String} duration
+ * @property {Number} maxAttempts
+ */
+
+/**
+ * @typedef MagicCodeOpts
+ * @property {String} magicSalt
+ * @property {Number} codeByteCount
+ * @property {BufferEncoding} codeEncoding
+ * @property {Number} idByteCount
+ * @property {BufferEncoding} idEncoding
+ * @property {Number} receiptByteCount
+ * @property {BufferEncoding} receiptEncoding
+ */
+
+/**
+ * @typedef MagicOrder
+ * @property {String} id
+ * @property {String} [receipt]
+ * @property {MagicIdentifier} [identifier]
+ * @property {any} [state]
+ * @property {Number} attempts
+ * @property {String} [duration]
+ * @property {String} [expires_at]
+ * @property {String} [canceled_at]
+ * @property {String} [canceled_by]
+ * @property {String} [canceled_ip]
+ * @property {String} [exchanged_at]
+ * @property {String} [ordered_at]
+ * @property {String} [ordered_by]
+ * @property {String} [ordered_ip]
+ * @property {String} [verified_at]
+ * @property {String} [verified_by]
+ * @property {String} [verified_ip]
+ */
+
+/**
+ * @typedef MagicStatus
+ * @property {String} id
+ * @property {String} status
+ * @property {any} [state]
+ * @property {String} [duration]
+ * @property {String} [expires_at]
+ * @property {String} [canceled_at]
+ * @property {String} [canceled_by]
+ * @property {String} [exchanged_at]
+ * @property {String} [ordered_at]
+ * @property {String} [ordered_by]
+ * @property {String} [verified_at]
+ * @property {String} [verified_by]
+ */
+
+/**
+ * @typedef MagicResponse
+ * @property {MagicOrder} order
+ * @property {MagicStatus} status
  */

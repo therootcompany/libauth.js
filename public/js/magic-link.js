@@ -6,7 +6,7 @@
 
   // scheme => 'https:'
   // host => 'localhost:3000'
-  // pathname => '/api/authn/session/oidc/google.com'
+  // pathname => '/api/authn/session/oidc/accounts.google.com'
   let baseUrl = `${document.location.protocol}//${document.location.host}`;
 
   // AJQuery
@@ -54,6 +54,9 @@
         type: "email",
         value: email,
         template: "magic-link",
+        state: {
+          foo: "bar",
+        },
       }),
     });
 
@@ -64,7 +67,7 @@
 
   async function checkStatus({ secret = "", receipt = "", id = "" }) {
     let resp = await window.fetch(
-      `${baseUrl}/api/authn/challenge` +
+      `${baseUrl}/api/authn/challenge/status` +
         `?id=${id}` +
         `&receipt=${receipt}` +
         `&token=${secret}`,

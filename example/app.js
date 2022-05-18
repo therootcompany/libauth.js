@@ -4,208 +4,50 @@ async function main() {
   require("dotenv").config({ path: ".env" });
   require("dotenv").config({ path: ".env.secret" });
 
+  let Fs = require("fs").promises;
   let http = require("http");
   let express = require("express");
   let app = require("@root/async-router").Router();
 
-  let authenticate = require("../middleware/");
+  let LibAuth = require("../");
   let issuer = process.env.BASE_URL || `http://localhost:${process.env.PORT}`;
+  let privkey = JSON.parse(await Fs.readFile("./key.jwk.json", "utf8"));
+  let libauth = LibAuth.create(issuer, privkey, {
+    cookiePath: "/api/authn/",
+  });
 
   let DB = require("./db.js");
-  // TODO is a default 'login' even possible?
-  async function login(req) {
-    let { strategy, email, iss, ppid, jws } = req.authn;
-
-    // TODO document strategies
-    console.log("strategy:", strategy);
-    switch (strategy) {
-      case "exchange":
-        return getAccessClaims(req);
-      default:
-      // continue
-    }
-
-    // TODO MFA
-    let user = await DB.get({
-      email: email || (req.body && req.body.user),
-      ppid: ppid,
-      id: jws && jws.claims.sub,
-    });
-    if (req.body.pass) {
-      if ("DEVELOPMENT" !== process.env.ENV) {
-        throw new Error("creds not implemented");
-      }
-      // TODO: check password
-      // (for right now, for testing, we'll just let it slide)
-    }
-    if (!user) {
-      throw new Error("TODO_NOT_FOUND");
-    }
-
-    return {
-      claims: {
-        sub: user.sub,
-        first_name: user.first_name,
-        // these are authz things (for an access token), but for the demo...
-        //account_id: user.account_id,
-      },
-      id_claims: {},
-      access_claims: {
-        roles: user.roles,
-      },
-    };
-  }
-  async function getAccessClaims(req) {
-    let { jws } = req.authn;
-    if (!jws) {
-      throw new Error("INVALID_CREDENTIALS");
-    }
-
-    let user = await DB.get({
-      id: jws && jws.claims.sub,
-    });
-    if (!user) {
-      throw new Error("TODO_NOT_FOUND");
-    }
-
-    let account = user.account;
-    if (req.body && req.body.account_id) {
-      let account = user.accounts[req.body.account_id];
-      user.account_id = undefined;
-      if (!account) {
-        throw new Error("TODO_BAD_ACCESS_REQUEST");
-      }
-      user.account_id = account.id;
-      user.roles = account.roles;
-    }
-
-    return {
-      // generic authn, token-related things
-      claims: {
-        sub: user.sub,
-      },
-      // authn-only things
-      id_claims: {
-        first_name: user.first_name,
-      },
-      // authz things
-      access_claims: {
-        account_id: user.account_id,
-        roles: user.roles,
-      },
-    };
-  }
-
-  /*
-async function getUserByPassword(req) {
-  // TODO validate Google Sign In id_token or magic link
-  // (or username and password if you're a bad person)
-  if (!req.body.is_verified) {
-    let err = new Error("Invalid login credentials");
-    err.code = "INVALID_CREDENTIALS";
-    throw new Error("");
-  }
-
-  // TODO use DB
-  return { sub: req.body.sub };
-}
-*/
-
-  async function notify(req) {
-    let { type, value, secret, id } = req.authn;
-    let request = require("@root/request");
-    let rnd = require("../lib/rnd.js");
-
-    if (!process.env.SEND_EMAIL && "DEVELOPMENT" === process.env.ENV) {
-      console.debug("[DEV] skipping email send");
-      return;
-    }
-
-    let preHeader = "";
-    let apiKey = process.env.MAILGUN_PRIVATE_KEY;
-    let domain = process.env.MAILGUN_DOMAIN;
-
-    let from = process.env.EMAIL_FROM;
-    let replyTo = process.env.EMAIL_REPLY_TO;
-    let msgDomain = process.env.EMAIL_ID_DOMAIN;
-
-    // TODO use heml + eta for email templates
-    let challenge_url = `${issuer}/#login?id=${id}&token=${secret}`;
-    let templates = {
-      "magic-link": {
-        subject: "Verify your email",
-        html: `${preHeader}<p>Here's your verification code: ${secret}\n\n<br><br>${challenge_url}</p>`,
-        text: `Here's your verification code: ${secret}\n\n${challenge_url}`,
-      },
-      "forgot-password": {
-        subject: "Password Reset Link",
-        html: `${preHeader}<p>Here's password reset code: ${secret}\n\n${challenge_url}</p>`,
-        text: `Here's password reset code: ${secret}\n\n${challenge_url}`,
-      },
-    };
-    let data = templates[req.body.template];
-    if (!data) {
-      throw new Error(
-        "Developer Error: invalid `template` value '" +
-          req.body.template +
-          "'. If you're just a regular person seeing this, it's not your fault. we did something wrong on our end."
-      );
-    }
-
-    let rndval = rnd();
-    let resp = await request({
-      url: `https://api.mailgun.net/v3/${domain}/messages`,
-      auth: `api:${apiKey}`,
-      form: {
-        from: from,
-        "h:Reply-To": replyTo,
-        "h:Message-ID": `${rndval}@${msgDomain}`,
-        "h:X-Entity-Ref-ID": `${rndval}@${msgDomain}`,
-        to: value,
-        subject: data.subject,
-        html: data.html,
-        text: data.text,
-      },
-    });
-
-    if (resp.statusCode >= 300) {
-      var err = new Error("failed to email message");
-      err.response = resp;
-      throw err;
-    }
-
-    return null;
-  }
-
-  let store = {
+  let MyDB = {};
+  let memstore = {
     _db: {},
     set: async function (id, val) {
-      store._db[id] = val;
+      memstore._db[id] = val;
     },
     get: async function (id) {
-      return store._db[id];
+      return memstore._db[id];
     },
   };
 
-  let Auth3000 = require("../");
-  let privkey = JSON.parse(process.env.PRIVATE_KEY);
-  let sessionMiddleware = Auth3000(issuer, privkey, { DEVELOPMENT: false });
-  sessionMiddleware.login(login);
-  sessionMiddleware.exchange(login);
-
-  sessionMiddleware.options({
-    //secret: process.env.HMAC_SECRET || process.env.COOKIE_SECRET,
-  });
-  sessionMiddleware.oidc({
-    "accounts.google.com": { clientId: process.env.GOOGLE_CLIENT_ID },
-  });
-  sessionMiddleware.challenge({
-    notify: notify,
-    store: store,
+  // Magic Link (challenge-based auth)
+  let magic = libauth.challenge({
+    store: memstore,
     maxAge: "24h",
     maxAttempts: 5,
+    magicSalt: privkey.d,
   });
-  sessionMiddleware.router();
+
+  async function notify(vars) {
+    //let vars = req.authn;
+    // Notify via CLI
+    console.info(vars);
+    console.info({
+      subject: `Your Magic Link is here! ${vars.code}.`,
+      text:
+        `Enter this login code when prompted: ${vars.code}. \n` +
+        // `Or login with this link: ${vars.iss}/login/#/${vars.id}/${vars.code}`,
+        `Or login with this link: ${vars.iss}/#login?id=${vars.id}&token=${vars.code}`,
+    });
+  }
 
   function greet(req, res) {
     return { message: "Hello, World!" };
@@ -218,20 +60,204 @@ async function getUserByPassword(req) {
     app.use("/", morgan("tiny"));
   }
   app.get("/hello", greet);
-  // TODO is one of refresh,exchange redundant?
-  // /api/authn/{session,refresh,exchange,challenge,logout}
-  app.use("/api/authn", await sessionMiddleware.router());
-  // /.well-known/openid-configuration
-  // /.well-known/jwks.json
-  app.use("/", sessionMiddleware.wellKnown());
+
+  let bodyParser = require("body-parser");
+  app.use("/api", bodyParser.json({ limit: "100kb" }));
+
+  let cookieParser = require("cookie-parser");
+  let cookieSecret = process.env.HMAC_SECRET || process.env.COOKIE_SECRET;
+  app.use("/api/authn", cookieParser(cookieSecret)); // needed to set cookies?
+
+  //
+  // /api/session/token/
+  //
+  // /api/session/credentials/token
+  // /api/redirect/oidc/accounts.google.com/auth
+  // /api/session/oidc/accounts.google.com/code
+  // /api/session/oidc/accounts.google.com/token
+
+  app.use("/api/authn/", libauth.initialize());
+
+  app.post(
+    "/api/authn/session/credentials",
+    libauth.credentials(),
+    MyDB.getUserClaimsByPassword,
+    libauth.newSession(),
+    libauth.setClaims(),
+    libauth.setTokens(),
+    libauth.setCookie(),
+    libauth.setCookieHeader(),
+    libauth.sendTokens(),
+  );
+
+  /*
+    // TODO MFA
+    async function checkForMfa(req, res, next) {
+      let user = DB.get(...)
+      //req.authn.state.mfa = user.requires_mfa;
+      req.body.state.mfa = user.requires_mfa;
+      next();
+    },
+  */
+
+  // Magic Link
+  app.post(
+    "/api/authn/challenge/order",
+    magic.setOrderParams,
+    magic.newLink,
+    magic.storeOrder,
+    MyDB.notify,
+    magic.sendOrder,
+  );
+
+  app.get(
+    "/api/authn/challenge/status",
+    magic.setOrderParams,
+    magic.getOrderById, // TODO status
+    magic.checkStatus,
+    magic.sendReceipt,
+  );
+
+  app.post(
+    // "/api/authn/session/magic/link",
+    "/api/authn/challenge/finalize",
+    magic.setOrderParams,
+    magic.getOrderById, // TODO status
+    magic.verifyOrder,
+    magic.storeOrder,
+    magic.catchFailure,
+    MyDB.getUserClaimsByIdentifier,
+    libauth.newSession(),
+    libauth.setClaims(),
+    libauth.setTokens(),
+    libauth.setCookie(),
+    libauth.setCookieHeader(),
+    libauth.sendTokens(),
+  );
+
+  // Google Sign In
+  let googleOidc = libauth.oidc(
+    require("../plugins/oidc-google/")({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      // TODO handle url relative to issuer
+      //redirectUri: "/api/authn/session/oidc/accounts.google.com/redirect",
+    }),
+  );
+  app.get(
+    //"/api/authn/oidc/accounts.google.com/authorization_redirect",
+    "/api/authn/session/oidc/accounts.google.com/redirect",
+    googleOidc.authorizationRedirect,
+    googleOidc.exchangeCode,
+    googleOidc.exchangeToken,
+    async function (req, res, next) {
+      // get a new session
+      let user = await DB.get({ ppid: req.authn.ppid });
+
+      req.authn.user = user;
+
+      let claims = {
+        sub: user.sub,
+        given_name: user.first_name,
+      };
+      // TODO set refresh JTI in database
+      // TODO expire prior JTI
+      await libauth.setCookieIfNewSession(req, res, claims);
+
+      let search = new URLSearchParams(req.query).toString();
+      res.redirect(`/?${search}`);
+    },
+  );
+  app.post(
+    "/api/authn/session/oidc/accounts.google.com",
+    googleOidc.exchangeToken,
+    //googleOidc.tokenRedirect,
+    async function (req, res, next) {
+      // get a new session
+      let user = await DB.get({ ppid: req.authn.ppid });
+
+      req.authn.user = user;
+      next();
+    },
+  );
+
+  // TODO let gh = require('@libauth/github').create()
+  /*
+  let oauth2Routes = libauth.oauth2({
+    "github.com": {
+      clientId: process.env.GITHUB_CLIENT_ID,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET,
+    },
+  });
+  let gh = oauth2Routes["github.com"];
+  */
+  /*
+  // For exchanging an implicit-grant (browser-side) token
+  app.post("api/authn/session/oauth2/github.com", gh.exchangeToken);
+  // For exchanging a grant_type=code (redirect) code
+  // (set the url in GitHub Application Settings:
+  // <https://github.com/organizations/{{YOUR_ORG_HERE}}/settings/applications>)
+  app.get(
+    "/api/authn/webhooks/oauth2/github.com",
+    gh.exchangeCode,
+    gh.exchangeToken,
+    async function (req, res, next) {
+      let user = await DB.get({ github: req.authn.id });
+
+      req.authn.user = user;
+      next();
+    },
+  );
+  // Optional Helpers
+  app.get("/api/authn/webhooks/oauth2/github.com/emails", gh.emails);
+  app.get("/api/authn/webhooks/oauth2/github.com/userinfo", gh.userinfo);
+  */
+
+  app.post(
+    "/api/authn/refresh",
+    libauth.refresh(),
+    async function (req, res, next) {
+      // get a new id token from a refresh token
+      let user = await DB.get({ id: req.authn.jws.claims.sub });
+
+      req.authn.user = user;
+      next();
+    },
+  );
+  app.post("/api/authn/exchange", libauth.exchange(), MyDB.getUserClaimsById);
+
+  // Logout (delete session cookie)
+  app.delete(
+    "/api/authn/session",
+    libauth.getCookie(),
+    MyDB.updateSession,
+    libauth.clearCookie(),
+    libauth.sendOk({ success: true }),
+    libauth.sendError({ success: true }),
+  );
+
+  app.use("/api/authn", async function (err, req, res, next) {
+    res.statusCode = err.status || 500;
+    if (500 == res.statusCode) {
+      console.error(err.stack);
+    }
+    res.json({
+      success: false,
+      code: err.code,
+      status: err.status,
+      message: err.message,
+    });
+  });
+
+  app.use("/.well-known/openid-configuration", libauth.wellKnownOidc());
+  app.use("/.well-known/jwks.json", libauth.wellKnownJwks());
 
   //
   // API Middleware & Handlers
   //
-  let bodyParser = require("body-parser");
-  app.use("/api", bodyParser.json({ limit: "100kb" }));
+  let authenticate = require("../middleware/");
   app.use("/api", authenticate({ iss: issuer, optional: true }));
-  app.use("/api", function (req, res, next) {
+  app.use("/api", function _authz(req, res, next) {
     if (!req.user) {
       // TODO bad idea
       req.user = {};
@@ -244,6 +270,7 @@ async function getUserByPassword(req) {
     }
     next();
   });
+
   if ("DEVELOPMENT" === process.env.ENV) {
     app.use("/api/debug/inspect", function (req, res) {
       res.json({ success: true, user: req.user || null });
@@ -266,7 +293,7 @@ async function getUserByPassword(req) {
         success: true,
         id: id,
       });
-    }
+    },
   );
   app.get(
     "/api/dummy/:id",
@@ -279,7 +306,7 @@ async function getUserByPassword(req) {
       }
 
       res.json({ success: false, code: "NOT_FOUND", message: "invalid id" });
-    }
+    },
   );
   app.get(
     "/api/dummy",
@@ -287,13 +314,16 @@ async function getUserByPassword(req) {
     function (req, res) {
       let dummyIds = Object.keys(dummies);
       res.json({ success: true, result: dummyIds });
-    }
+    },
   );
 
   //
   // Error Handlers
   //
   app.use("/api/", function apiErrorHandler(err, req, res, next) {
+    if ("UNAUTHORIZED" === err.code) {
+      err.status = 401;
+    }
     if (!err.code) {
       next(err);
       return;
@@ -323,6 +353,95 @@ async function getUserByPassword(req) {
     res.statusCode = 500;
     res.end("Internal Server Error");
   });
+
+  function userToClaims(user) {
+    return {
+      // "Subject" the user ID or Pairwise ID (required)
+      sub: user.id,
+
+      // ID Token Info (optional)
+      given_name: user.first_name,
+      family_name: user.first_name,
+      picture: user.photo_url,
+      email: user.email,
+      email_verified: user.email_verified_at || false,
+      zoneinfo: user.timezoneName,
+      locale: user.localeName,
+    };
+  }
+
+  MyDB.updateSession = async function (req, res, next) {
+    async function mw() {
+      // Invalidate the old session, if any
+      let sessionId = libauth.get(req, "sessionJws")?.claims?.jti;
+      if (sessionId) {
+        await DB.Session.set({ id: sessionId, deleted_at: new Date() });
+      }
+
+      // Save the new session
+      let newSessionClaims = libauth.get(req, "sessionClaims");
+      let newSessionId = newSessionClaims.jti;
+      let userId = newSessionClaims.sub;
+
+      await DB.Session.set({ id: newSessionId, user_id: userId });
+
+      next();
+    }
+
+    // (shim for adding await support to express)
+    Promise.resolve().then(mw).catch(next);
+  };
+
+  MyDB.getUserClaimsById = async function (req, res, next) {
+    let userId = libauth.get(req, "bearerClaims").sub;
+
+    // get a new access token from an ID token (or refresh token?)
+    let user = await DB.get({ id: userId });
+
+    let idClaims = userToClaims(user);
+    libauth.set(req, { idClaims: idClaims, accessClaims: {} });
+
+    next();
+  };
+
+  MyDB.getUserClaimsByIdentifier = async function (req, res, next) {
+    let email = libauth.get(req, "identifier").value;
+
+    // get a new session
+    // TODO check if it's actually email!
+    let user = await DB.get({ email: email });
+
+    let idClaims = userToClaims(user);
+    libauth.set(req, { idClaims: idClaims, accessClaims: {} });
+
+    next();
+  };
+
+  MyDB.getUserClaimsByPassword = async function (req, res, next) {
+    let creds = libauth.get(req, "credentials");
+    let user = await DB.get({ email: creds.email });
+
+    // TODO assertSecureCompare?
+    let valid = libauth.secureCompare(
+      creds.password,
+      //user.password,
+      "my-password",
+      6,
+    );
+    if (!valid) {
+      // Note: the behavior of send-magic-link-on-auth-failure
+      // belongs to the client side
+      let err = new Error("password is too short or doesn't match");
+      err.code = "E_CREDENTIALS_INVALID";
+      err.status = 400;
+      throw err;
+    }
+
+    let idClaims = userToClaims(user);
+    libauth.set(req, { idClaims: idClaims, accessClaims: {} });
+
+    next();
+  };
 
   // Dev / Localhost Local File Server
   if ("DEVELOPMENT" === process.env.ENV) {

@@ -76,6 +76,7 @@
     "./types.js",
     "./index.js",
     "./middleware/**/*.js",
+    "./plugins/**/*.js",
     "./lib/**/*.js"
   ],
   "exclude": ["node_modules", "public", "example", "utils", "tests"]

@@ -2,6 +2,9 @@
 
 var E = require("../../errors.js");
 
+//@ts-ignore
+let request = require("@root/request");
+
 /**
  * @typedef GhEmail
  * @property {string} email
@@ -9,12 +12,21 @@ var E = require("../../errors.js");
  * @property {boolean} verified
  */
 
-function verifyGitHubToken(/*verifyOpts*/) {
+/**
+ * @param {any} libauth
+ * @param {any} libOpts
+ * @param {Oauth2MiddlewareOpts} pluginOpts
+ */
+function create(libauth, libOpts, pluginOpts) {
   /** @type {import('express').Handler} */
-  return async function (req, res, next) {
-    //@ts-ignore // TODO
-    let request = require("@root/request");
-    let token = (req.headers.authorization || "").replace(/^Bearer /, "");
+  async function exchangeGitHubToken(req, res, next) {
+    //@ts-ignore
+    let codeResponse = libauth.get(req, "codeResponse");
+    let token = codeResponse?.access_token;
+
+    if (!token) {
+      token = (req.headers.authorization || "").replace(/^Bearer /, "");
+    }
 
     // See https://docs.github.com/en/rest/reference/users
     // notably: name (given + family? arbitrary?), email,
@@ -52,21 +64,33 @@ function verifyGitHubToken(/*verifyOpts*/) {
       issuer: "https://github.com",
       profile: profile,
     };
-    next();
-  };
-}
 
-/**
- * @param {Oauth2MiddlewareOpts & { _gh: any }} opts
- */
-function authorize({ app, _gh, opts, _strategyHandler, grantTokensAndCookie }) {
-  app.get("/webhooks/oauth2/github.com", async function (req, res) {
     //@ts-ignore
-    let request = require("@root/request");
+    libauth.set(req, {
+      strategy: "oauth2",
+      //@ts-ignore
+      email: req._oauth2.email,
+      //@ts-ignore
+      email_verified: req._oauth2.email_verified,
+      //@ts-ignore
+      iss: req._oauth2.iss,
+      //@ts-ignore
+      sub: req._oauth2.sub, // TODO
+      //@ts-ignore
+      id: req._oauth2.id, // TODO
+      //@ts-ignore
+      oauth2_profile: req._oauth2.profile,
+    });
+
+    next();
+  }
+
+  /** @type {import('express').Handler} */
+  async function exchangeCode(req, res, next) {
     // https://docs.github.com/en/developers/apps/building-oauth-apps/authorizing-oauth-apps#web-application-flow
 
-    let clientId = _gh.clientId;
-    let clientSecret = _gh.clientSecret;
+    let clientId = pluginOpts.clientId;
+    let clientSecret = pluginOpts.clientSecret;
     let code = req.query.code;
     // TODO check state
     //let state = req.query.state;
@@ -83,20 +107,42 @@ function authorize({ app, _gh, opts, _strategyHandler, grantTokensAndCookie }) {
         //redirect_uri: process.env.GITHUB_REDIRECT_URI,
       },
     });
+    // TODO throw error if !resp.ok
+    let params = new URLSearchParams(resp.body);
+    /** @type {any} */
+    let details = {};
+    params.forEach(function (v, k) {
+      details[k] = v;
+    });
+
+    //@ts-ignore
+    libauth.set(req, {
+      strategy: "oauth2",
+      // TODO what's the proper name?
+      codeResponse: details,
+    });
+
+    next();
+  }
+
+  // For redirecting the token directly back to the browser
+  /** @type {import('express').Handler} */
+  async function redirectToken(req, res) {
+    let form = libauth.get(req, "codeResponse");
+    let search = new URLSearchParams(form).toString();
     // TODO issuer may not be 1:1 with return url
-    var loginUrl = _gh.loginUrl || opts.issuer;
+    var loginUrl = pluginOpts.loginUrl || libOpts.issuer;
     var url = new URL(
-      `${loginUrl}#${resp.toJSON().body}&issuer=github.com&state=${
-        req.query.state
-      }`
+      `${loginUrl}#${search}&issuer=github.com&state=${req.query.state}`,
     );
 
     res.statusCode = 302;
     res.setHeader("Location", url.toString());
     res.end("<!-- Redirecting... -->");
-  });
+  }
 
-  app.get("/webhooks/oauth2/github.com/emails", async function (req, res) {
+  /** @type {import('express').Handler} */
+  async function getEmailsRoute(req, res) {
     let token = (req.headers.authorization || "").replace(/^Bearer /, "");
 
     let emails = await getEmails(token);
@@ -106,52 +152,27 @@ function authorize({ app, _gh, opts, _strategyHandler, grantTokensAndCookie }) {
           email: email.email,
           email_verified: email.verified,
         };
-      })
+      }),
     );
-  });
+  }
 
-  app.get("/webhooks/oauth2/github.com/userinfo", async function (req, res) {
+  /** @type {import('express').Handler} */
+  async function getUserinfoRoute(req, res) {
     let token = (req.headers.authorization || "").replace(/^Bearer /, "");
 
     let profile = await getProfile(token);
     res.json(profile);
-  });
+  }
 
-  /** @type {import('express').Handler} */
-  let byGitHubOauth2 = async function (req, res) {
-    //@ts-ignore
-    req[opts.authnParam] = {
-      strategy: "oauth2",
-      //@ts-ignore
-      email: req._oauth2.email,
-      //@ts-ignore
-      email_verified: req._oauth2.email_verified,
-      //@ts-ignore
-      iss: req._oauth2.iss,
-      //@ts-ignore
-      sub: req._oauth2.sub, // TODO
-      //@ts-ignore
-      id: req._oauth2.id, // TODO
-      //@ts-ignore
-      oauth2_profile: req._oauth2.profile,
-    };
-    let allClaims = await _strategyHandler(req, res);
-    //@ts-ignore
-    req[opts.authnParam] = null;
-    // TODO delete req._oauth2? (and for oidc too?)
-
-    // TODO deprecate
-    if (allClaims || !res.headersSent) {
-      let tokens = await grantTokensAndCookie(allClaims, req, res);
-      res.json(tokens);
-    }
+  let routes = {
+    //authorization: TODO_openAuthorizationDialog
+    exchangeToken: exchangeGitHubToken,
+    exchangeCode: exchangeCode,
+    userinfo: getUserinfoRoute,
+    emails: getEmailsRoute,
   };
 
-  app.post(
-    "/session/oauth2/github.com",
-    verifyGitHubToken(/*{}*/),
-    byGitHubOauth2
-  );
+  return routes;
 }
 
 /**
@@ -159,9 +180,6 @@ function authorize({ app, _gh, opts, _strategyHandler, grantTokensAndCookie }) {
  * @returns {Promise<GhEmail[]>}
  */
 async function getEmails(token) {
-  //@ts-ignore // TODO
-  let request = require("@root/request");
-
   let resp2 = await request({
     //url: "https://api.github.com/user",
     url: "https://api.github.com/user/emails",
@@ -221,9 +239,6 @@ async function getEmails(token) {
  * @returns {Promise<any>}
  */
 async function getProfile(token) {
-  //@ts-ignore // TODO
-  let request = require("@root/request");
-
   let resp1 = await request({
     url: "https://api.github.com/user",
     headers: {
@@ -240,4 +255,4 @@ async function getProfile(token) {
   return profile;
 }
 
-module.exports = authorize;
+module.exports.create = create;
