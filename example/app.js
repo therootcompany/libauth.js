@@ -33,6 +33,7 @@ async function main() {
     store: memstore,
     maxAge: "24h",
     maxAttempts: 5,
+    magicSalt: privkey.d,
   });
 
   async function notify(vars) {
@@ -230,7 +231,7 @@ async function main() {
     "/api/authn/session",
     libauth.getCookie(),
     MyDB.updateSession,
-    libauth.logout(),
+    libauth.clearCookie(),
     libauth.sendOk({ success: true }),
     libauth.sendError({ success: true }),
   );

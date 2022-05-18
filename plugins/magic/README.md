@@ -73,35 +73,41 @@ let magicLink = libauth.challenge(
         await DB.MagicLinks.set(orderId, details);
       },
     },
+    magicSalt: "xxxxxxxxxx",
   }),
 );
 ```
 
-```
+```js
 // Create an "order", and send the notification
 app.post(
   "/api/session/magic/order",
   MyDB.getUserByIdentifier,
-  magicLink.setOrder,
-  MyNotifier.saveOrder,
+  magicLink.parseParams,
+  magicLink.newMagicLink,
+  magicLink.saveOrder,
+  MyNotifier.notify,
   magicLink.sendReceipt,
 );
 
 // Check the status of the order
 app.get(
   "/api/session/magic/status",
+  magicLink.parseParams,
   magicLink.getStatus,
-  MyNotifier.loadStatus,
+  magicLink.check,
   magicLink.sendStatus,
 );
 
 // Redeem the code (or receipt) for a token
 app.post(
   "/api/session/magic/token",
+  magicLink.parseParams,
   magicLink.getStatus,
-  MyNotifier.loadStatus,
-  magicLink.checkStatus,
-  MyNotifier.saveStatus,
+  magicLink.check,
+  magicLink.incrementOnRetry,
+  magicLink.exchange,
+  magicLink.saveOrder,
   MyDB.getUserByIdentifier,
   libauth.setClaims,
   libauth.setCookie,
@@ -114,8 +120,8 @@ app.post(
 app.delete(
   "/api/session/magic/order/:id",
   magicLink.cancelOrder,
-  MyNotifier.saveStatus,
-  magicLink.sendReceipt,
+  magicLink.saveOrder,
+  magicLink.sendStatus,
 );
 ```
 
