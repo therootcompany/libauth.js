@@ -6,8 +6,10 @@
 // Authenticate Users
 let Auth3000 = require("auth3000");
 let issuer = "http://localhost:3000";
-let privkey = JSON.parse(fs.readFileSync("./key.jwk.json"));
-let sessionMiddleware = Auth3000(issuer, privkey, { DEVELOPMENT: false });
+let privkey = JSON.parse(fs.readFileSync("./key.jwk.json", "utf8"));
+let sessionMiddleware = Auth3000.create(issuer, privkey, {
+  DEVELOPMENT: false,
+});
 
 sessionMiddleware.login(async function (req, res) {
   let { strategy, email, iss, ppid, oidc_claims } = req.authn;
@@ -20,15 +22,93 @@ sessionMiddleware.login(async function (req, res) {
       throw new Error("unsupported auth strategy");
   }
 });
-sessionMiddleware.oidc({ "accounts.google.com": { clientId: "xxxx" } });
-sessionMiddleware.oauth2({
-  github: { clientId: "xxxx", clientSecret: "xxxx" },
-});
-sessionMiddleware.challenge({ notify, store, maxAge: "24h", maxAttempts: 5 });
-sessionMiddleware.credentials();
 
-// /api/authn/{session,refresh,exchange,challenge,logout}
-app.use("/api/authn", sessionMiddleware.router());
+// OIDC Login (i.e. Google, Auth0, Okta)
+let oidcRoutes = sessionMiddleware.oidc({
+  "accounts.google.com": { clientId: "xxxx" },
+});
+app.post(
+  "/api/authn/oidc/accounts.google.com",
+  oidcRoutes["accounts.google.com"],
+);
+// app.post("/api/authn/oidc/:issuer", oidcRoutes);
+
+let oauth2Routes = sessionMiddleware.oauth2({
+  "github.com": { clientId: "xxxx", clientSecret: "xxxx" },
+});
+app.post("/api/authn/oauth2/github.com", oauth2Routes["github.com"]);
+
+// Magic Link (challenge-based auth)
+let challengeRoutes = sessionMiddleware.challenge({
+  store,
+  maxAge: "24h",
+  maxAttempts: 5,
+});
+app.post(
+  "/api/authn/challenge/order",
+  challengeRoutes.order,
+  async function notify(req, res, next) {
+    let vars = req.authn;
+    await mailer.send({
+      subject: `Your Magic Link is here! ${vars.code}.`,
+      text:
+        `Enter this login code when prompted: ${vars.code}. \n` +
+        `Or login with this link: https://${vars.iss}/login/#/${vars.id}/${vars.code}`,
+    });
+    res.json(req.authn.order);
+  },
+);
+app.get("/api/authn/challenge/status", challengeRoutes.checkStatus);
+app.post("/api/authn/challenge/finalize", challengeRoutes.redeemCode);
+app.post("/api/authn/challenge/exchange", challengeRoutes.exchangeReceipt);
+
+// Credential (User/Pass) Auth
+// TODO
+app.post(
+  "/api/authn/session",
+  sessionMiddleware.credentials(async function (req) {
+    let auth = req.body;
+    await Users.validatePassword({
+      email: auth.email,
+      password: auth.password,
+    });
+  }),
+);
+
+app.post(
+  "/api/authn/refresh",
+  sessionMiddleware.refresh(),
+  async function (req, res) {
+    await libauth.grantCookie(res);
+    // ...
+  },
+);
+app.post(
+  "/api/authn/exchange",
+  sessionMiddleware.exchange(),
+  async function (req, res) {
+    await libauth.grantCookie(res);
+    // ...
+  },
+);
+
+app.use("/api/authn", async function (req, res) {
+  //req.authn
+  let user = User.get(req.authn.email);
+  await libauth.grantCookie(user, res);
+
+  let tokens = await libauth.grantTokens(user);
+  res.json(tokens);
+});
+
+// Logout (delete session cookie)
+app.delete(
+  "/api/authn/session",
+  sessionMiddleware.logout(async function (req) {
+    SessionsModel.delete(req.authn.jws.claims.jti);
+  }),
+);
+
 // /.well-known/openid-configuration
 app.use("/", sessionMiddleware.wellKnown());
 ```
@@ -247,25 +327,26 @@ async function logoutHandler(req) {
 
 ## Errors
 
-| Name                         | Status | Message (truncated)                              |
-| ---------------------------- | ------ | ------------------------------------------------ |
-| E_CODE_INVALID               | 400    | That verification code isn't valid. It might ... |
-| E_CODE_REDEEMED              | 400    | That verification code has already been used ... |
-| E_CODE_RETRY                 | 400    | That verification code isn't correct. It may ... |
-| E_OIDC_UNVERIFIED_IDENTIFIER | 400    | You cannot use the identifier associated with... |
-| E_SESSION_INVALID            | 400    | Missing or invalid cookie session. Please log... |
-| E_SUSPICIOUS_REQUEST         | 400    | Something suspicious is going on - as if ther... |
-| E_SUSPICIOUS_TOKEN           | 400    | Something suspicious is going on - the given ... |
-| E_DEVELOPER_ERROR            | 422    | Oops! One of the programmers made a mistake. ... |
-| " -> WRONG_TOKEN_TYPE        | 422    | the HTTP Authorization was not given in a sup... |
-| " -> MISSING_TOKEN           | 401    | the required authorization token was not prov... |
+| Name                         | Status   | Message (truncated)                              |
+| ---------------------------- | -------- | ------------------------------------------------ |
+| E_CODE_NOT_FOUND             | 404      | That verification code isn't valid. It might ... |
+| E_CODE_INVALID               | 400\|403 | That verification code isn't valid. It might ... |
+| E_CODE_REDEEMED              | 400      | That verification code has already been used ... |
+| E_CODE_RETRY                 | 400      | That verification code isn't correct. It may ... |
+| E_OIDC_UNVERIFIED_IDENTIFIER | 400      | You cannot use the identifier associated with... |
+| E_SESSION_INVALID            | 400      | Missing or invalid cookie session. Please log... |
+| E_SUSPICIOUS_REQUEST         | 400      | Something suspicious is going on - as if ther... |
+| E_SUSPICIOUS_TOKEN           | 400      | Something suspicious is going on - the given ... |
+| E_DEVELOPER_ERROR            | 422      | Oops! One of the programmers made a mistake. ... |
+| " -> WRONG_TOKEN_TYPE        | 422      | the HTTP Authorization was not given in a sup... |
+| " -> MISSING_TOKEN           | 401      | the required authorization token was not prov... |
 
 ## Authentication (Issuer) Middleware
 
 ```js
 let Auth3000 = require("auth3000");
 
-let sessionMiddleware = Auth3000(issuer, privkey, {});
+let sessionMiddleware = Auth3000.create(issuer, privkey, {});
 
 sessionMiddleware.login(loginHandler);
 
@@ -529,7 +610,7 @@ let verify = require("auth3000/middleware/");
 
 app.use(
   "/api",
-  verify({ iss: issuer, optional: true, userParam: "user", jwsParam: "jws" })
+  verify({ iss: issuer, optional: true, userParam: "user", jwsParam: "jws" }),
 );
 ```
 
@@ -973,6 +1054,35 @@ Response
   }
 }
 ```
+
+# Philosophy
+
+The goal of LibAuth is to minimize _magic_ (anything difficult to understand or
+configure), and _maximize control_, without sacrificing _ease-of-use_ or
+convenience.
+
+To do this we require more copy-and-paste boilerplate than other auth
+libraries - with the upside is that it's all just normal, easy-to-replace
+_middleware_ - hopefully nothing unexpected or constraining.
+
+You'll also notice that we try to use the proper, official technical language
+rather than potentially ambiguous sugar-coated terms.
+
+## Glossary
+
+| Term            | Meaning                                                       |
+| --------------- | ------------------------------------------------------------- |
+| JWS             | A decoded JWT (non-compact JWS), or JSON Web Signature        |
+| JWT             | A compact (or encoded) JWS, or JSON Web Token                 |
+| `id_token`      | A JWT with information about the user, such `given_name`      |
+| `access_token`  | A JWT with information about an account or resource           |
+| `refresh_token` | A long-lived JWT, stored in a session cookie (or config file) |
+
+## Design Decisions
+
+- directed flow of data
+  - `libauth` passes data to you through `req.authn` via middleware
+  - You pass data to `libauth` by POST or by calling functions
 
 # Resources
 
