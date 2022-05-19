@@ -45,6 +45,11 @@ async function main() {
 
       // Save the new session
       let newSessionClaims = libauth.get(req, "sessionClaims");
+      if (!newSessionClaims) {
+        next();
+        return;
+      }
+
       let newSessionId = newSessionClaims.jti;
       let userId = newSessionClaims.sub;
 
@@ -282,6 +287,7 @@ async function main() {
     libauth.setCookie(),
     MyDB.updateSession,
     libauth.setCookieHeader(),
+    libauth.captureError(),
     libauth.redirectWithTokens("/my-account"),
   );
 
@@ -365,19 +371,6 @@ async function main() {
     libauth.sendError({ success: true }),
   );
 
-  app.use("/api/authn", async function (err, req, res, next) {
-    res.statusCode = err.status || 500;
-    if (500 == res.statusCode) {
-      console.error(err.stack);
-    }
-    res.json({
-      success: false,
-      code: err.code,
-      status: err.status,
-      message: err.message,
-    });
-  });
-
   app.use("/.well-known/openid-configuration", libauth.wellKnownOidc());
   app.use("/.well-known/jwks.json", libauth.wellKnownJwks());
 
@@ -450,6 +443,7 @@ async function main() {
   // Error Handlers
   //
   app.use("/api/", function apiErrorHandler(err, req, res, next) {
+    console.error("[DEBUG] /api", err);
     if ("UNAUTHORIZED" === err.code) {
       err.status = 401;
     }
