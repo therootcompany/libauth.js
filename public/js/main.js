@@ -150,6 +150,15 @@
   }
 
   function parseQuerystring(querystring) {
+    for (;;) {
+      let first = querystring[0];
+      if (!["#", "/", "?"].includes(first)) {
+        break;
+      }
+      querystring = querystring.slice(1);
+    }
+
+    // TODO maybe use URLSearchParams(str)?
     var query = {};
     querystring.split("&").forEach(function (pairstring) {
       var pair = pairstring.split("=");
@@ -233,6 +242,12 @@
     return;
   }
 
+  // removes the signature (which is the secret part)
+  function redactJwt(jwt) {
+    // aaaa.bbbb.cccc = > aaaa.bbbb.[redacted]
+    return jwt.split(".").slice(0, 2).join(".") + ".[redacted]";
+  }
+
   async function completeOauth2SignIn(query) {
     // nix token from browser history
     window.history.pushState(
@@ -242,7 +257,7 @@
     );
 
     // Show the token for easy capture
-    console.info("access_token", query.access_token);
+    console.info("access_token", redactJwt(query.access_token));
 
     if ("github.com" === query.issuer) {
       // TODO this is moot. We could set the auth cookie at time of redirect
@@ -279,9 +294,17 @@
     );
 
     // Show the token for easy capture
-    console.info("id_token", query.id_token);
+    console.info("id_token", redactJwt(query.id_token));
 
     let jws = await parseJwt(query.id_token).catch(die);
+    console.info("jws:");
+    jws.signature = "[redacted]";
+    console.info(jws);
+
+    if (jws.claims.iss.includes(document.location.hostname)) {
+      await doStuffWithUser(query);
+      return;
+    }
 
     if ("https://accounts.google.com" === jws.claims.iss) {
       // TODO make sure we've got the right options for fetch !!!
@@ -301,7 +324,10 @@
       console.info(result);
 
       await doStuffWithUser(result);
+      return;
     }
+
+    window.alert(`unrecognized token issuer '${jws.claims.iss}'`);
     // TODO what if it's not google?
   }
 

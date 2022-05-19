@@ -306,7 +306,7 @@ async function main() {
     MyDB.updateSession,
     libauth.setCookieHeader(),
     libauth.captureError(),
-    libauth.redirectWithTokens("/my-account"),
+    libauth.redirectWithTokens("/#"),
   );
 
   //
