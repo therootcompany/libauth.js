@@ -14,11 +14,16 @@ async function main() {
   let privkey = JSON.parse(await Fs.readFile("./key.jwk.json", "utf8"));
   let libauth = LibAuth.create(issuer, privkey, {
     cookiePath: "/api/authn/",
+    /*
+    refreshCookiePath: "/api/authn/",
+    accessCookiePath: "/api/assets/",
+    */
   });
 
   let DB = require("./db.js");
 
   let MyDB = {};
+
   function userToClaims(user) {
     return {
       // "Subject" the user ID or Pairwise ID (required)
@@ -82,6 +87,19 @@ async function main() {
 
     let idClaims = userToClaims(user);
     libauth.set(req, { idClaims });
+
+    next();
+  };
+
+  MyDB.getUserClaimsBySub = async function (req, res, next) {
+    let sub = libauth.get(req, "userClaims")?.sub;
+
+    // get a new session
+    // TODO check if it's actually email!
+    let user = await DB.get({ id: sub });
+
+    let idClaims = userToClaims(user);
+    libauth.set(req, { idClaims: idClaims, accessClaims: {} });
 
     next();
   };
@@ -244,7 +262,6 @@ async function main() {
     magic.getOrderById, // TODO status
     magic.verifyOrder,
     magic.storeOrder,
-    magic.catchFailure,
     MyDB.getUserClaimsByIdentifier,
     libauth.newSession(),
     libauth.setClaims(),
@@ -278,7 +295,8 @@ async function main() {
   app.get(
     //"/api/session/oidc/accounts.google.com/code",
     "/api/authn/session/oidc/accounts.google.com/redirect",
-    googleOidc.exchangeCode,
+    googleOidc.getCodeParams,
+    googleOidc.requestToken,
     googleOidc.verifyToken,
     MyDB.getUserClaimsByOidcEmail,
     libauth.newSession(),
@@ -343,8 +361,9 @@ async function main() {
   app.post(
     // "/api/session/token",
     "/api/authn/refresh",
-    libauth.getCookie(),
+    libauth.requireCookie(),
     //libauth.verifySession(),
+    MyDB.getUserClaimsBySub,
     libauth.refresh(), // TODO refreshIdToken, verifySession
     libauth.setClaims(),
     libauth.setTokens(),
@@ -353,7 +372,8 @@ async function main() {
 
   app.post(
     "/api/authn/exchange",
-    //libauth.verifyBearerToken(),
+    libauth.requireBearerClaims(),
+    MyDB.getUserClaimsBySub,
     libauth.exchange(), // TODO verifyBearer
     libauth.setClaims(),
     libauth.setTokens(),
