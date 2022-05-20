@@ -1,4 +1,65 @@
 /**
+ * @typedef LibAuth
+ * @property {PromisifyHandler} promisifyHandler
+ * @property {PromisifyErrHandler} promisifyErrHandler
+ * @property {LibAuthGet} get
+ */
+
+/**
+ * @typedef LibAuthOpts
+ * @property {String} accessMaxAge
+ * @property {String} authnParam
+ * @property {String} cookieName
+ * @property {String} cookiePath
+ * @property {String} idMaxAge
+ * @property {String} issuer
+ * x@property {String} magicSalt -
+ * @property {String} refreshMaxAge
+ * @property {String} sessionMaxAge
+ * @property {String} trustedMaxAge
+ */
+
+/**
+ * Makes the given route handler async/await and Promise friendly.
+ *
+ * @callback PromisifyHandler
+ * @param {import('express').Handler} handler
+ * @returns {import('express').Handler}
+ */
+
+// `@callback` is an alias for `@typeduf {Function}`
+// See <https://stackoverflow.com/a/60643856>.
+
+/**
+ * Makes the given route error handler async/await and Promise friendly.
+ *
+ * @typedef {Function} PromisifyErrHandler
+ * @param {import('express').ErrorRequestHandler} errHandler
+ * @returns {import('express').ErrorRequestHandler}
+ */
+
+/**
+ * Get a param from the request object.
+ *
+ * @typedef {Function} LibAuthGet
+ * @param {import('express').Handler} req
+ * @param {String} [key]
+ * @returns {any}
+ */
+
+// TODO maybe use Record<String,String> instead of Object?
+
+/**
+ * Set a param on the request object.
+ *
+ * @typedef {Function} LibAuthSet
+ * @param {import('express').Handler} req
+ * @param {String|Object} key
+ * @param {any} [value]
+ * @returns {void}
+ */
+
+/**
  * @typedef {Object} Jws
  * @property {string} [payload]
  * @property {string} [protected]
