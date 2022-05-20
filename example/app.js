@@ -172,7 +172,8 @@ async function main() {
     magicSalt: privkey.d,
   });
 
-  async function notify(vars) {
+  MyDB.notify = async function (req, res, next) {
+    let vars = libauth.get(req, "challenge");
     //let vars = req.authn;
     // Notify via CLI
     console.info(vars);
@@ -181,9 +182,11 @@ async function main() {
       text:
         `Enter this login code when prompted: ${vars.code}. \n` +
         // `Or login with this link: ${vars.iss}/login/#/${vars.id}/${vars.code}`,
-        `Or login with this link: ${vars.iss}/#login?id=${vars.id}&token=${vars.code}`,
+        `Or login with this link: ${issuer}/#login?id=${vars.order.id}&token=${vars.code}`,
     });
-  }
+
+    next();
+  };
 
   function greet(req, res) {
     return { message: "Hello, World!" };
@@ -240,28 +243,52 @@ async function main() {
   // Magic Link
   app.post(
     "/api/authn/challenge/order",
-    magic.setOrderParams,
-    magic.newLink,
-    magic.storeOrder,
+    magic.setParams,
+    magic.generateChallenge,
+    magic.saveChallenge,
     MyDB.notify,
-    magic.sendOrder,
+    magic.sendStatus,
   );
+
+  /*
+  magicRoutes.setParams
+  magicRoutes.generateChallenge
+
+  magicRoutes.saveChallenge
+
+  magicRoutes.checkStatus
+  magicRoutes.exchange
+
+  magicRoutes.getChallenge
+  magicRoutes.verifyResponse
+
+  magicRoutes.cancelChallenge
+
+  magicRoutes.sendReceipt
+  magicRoutes.sendStatus
+
+  magicRoutes.reviveError
+  */
 
   app.get(
     "/api/authn/challenge/status",
-    magic.setOrderParams,
-    magic.getOrderById, // TODO status
+    magic.setParams,
+    magic.getChallenge,
     magic.checkStatus,
     magic.sendReceipt,
   );
 
+  // TODO check status of expired token for redirectability
+  // TODO embed redirect?
+
   app.post(
     // "/api/authn/session/magic/link",
     "/api/authn/session/challenge",
-    magic.setOrderParams,
-    magic.getOrderById, // TODO status
-    magic.verifyOrder,
-    magic.storeOrder,
+    magic.setParams,
+    magic.getChallenge,
+    magic.verifyResponse,
+    magic.saveChallenge,
+    // TODO magic.requireVerified? magic.checkError?
     MyDB.getUserClaimsByIdentifier,
     libauth.newSession(),
     libauth.setClaims(),

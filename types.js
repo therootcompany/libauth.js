@@ -3,6 +3,7 @@
  * @property {PromisifyHandler} promisifyHandler
  * @property {PromisifyErrHandler} promisifyErrHandler
  * @property {LibAuthGet} get
+ * @property {LibAuthSet} set
  */
 
 /**

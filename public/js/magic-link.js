@@ -20,7 +20,7 @@
     console.error(err);
     window.alert(
       `Oops! There was an unexpected error on the server.\nIt's not your fault.\n\n` +
-        `Technical Details for Tech Support: \n${err.message}`
+        `Technical Details for Tech Support: \n${err.message}`,
     );
     throw err;
   }
@@ -51,6 +51,10 @@
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        identifier: {
+          type: "email",
+          value: email,
+        },
         type: "email",
         value: email,
         template: "magic-link",
@@ -71,7 +75,7 @@
         `?id=${id}` +
         `&receipt=${receipt}` +
         `&token=${secret}`,
-      {}
+      {},
     );
 
     let body = await resp.json();
@@ -139,7 +143,7 @@
     try {
       localStorage.setItem(
         `auth3000:id:${resp.data.id}`,
-        Date.now().toString()
+        Date.now().toString(),
       );
     } catch (e) {
       // TODO fallback when localStorage is not available
@@ -183,7 +187,7 @@
       "",
       document.title,
       // remove the hash with token from browser url bar
-      window.location.pathname + window.location.search
+      window.location.pathname + window.location.search,
     );
 
     // TODO loading spinner
