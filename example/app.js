@@ -158,6 +158,7 @@ async function main() {
     _db: {},
     set: async function (challenge) {
       memstore._db[challenge.id] = challenge;
+      memstore._db[challenge.identifier_value] = challenge;
     },
     get: async function ({ id }) {
       return memstore._db[id];
@@ -217,8 +218,15 @@ async function main() {
 
   //app.use("/api/authn/", libauth.initialize());
 
+  /*
+    libauth.credentials({});
+    libauth.google({ clientId: 'xxxx' });
+    app.use('/api/authn', libauth.routes())
+  */
+
   app.post(
     "/api/authn/session/credentials",
+    //libauth.readCredentials(),
     libauth.credentials(),
     MyDB.getUserClaimsByPassword,
     libauth.newSession(),
@@ -247,7 +255,7 @@ async function main() {
     magic.generateChallenge,
     magic.saveChallenge,
     MyDB.notify,
-    magic.sendStatus,
+    magic.sendReceipt,
   );
 
   /*
@@ -275,7 +283,7 @@ async function main() {
     magic.setParams,
     magic.getChallenge,
     magic.checkStatus,
-    magic.sendReceipt,
+    magic.sendStatus,
   );
 
   // TODO check status of expired token for redirectability
@@ -286,8 +294,11 @@ async function main() {
     "/api/authn/session/challenge",
     magic.setParams,
     magic.getChallenge,
-    magic.verifyResponse,
-    magic.saveChallenge,
+    magic.requireVerification,
+    magic.checkStatus, // ERROR!!!
+    magic.saveChallenge, // MUST RUN!
+    magic.saveError, // MUST RUN!
+
     // TODO magic.requireVerified? magic.checkError?
     MyDB.getUserClaimsByIdentifier,
     libauth.newSession(),
@@ -296,6 +307,8 @@ async function main() {
     libauth.setCookie(),
     MyDB.updateSession,
     libauth.setCookieHeader(),
+
+    magic.saveChallenge,
     libauth.sendTokens(),
   );
 
@@ -328,13 +341,28 @@ async function main() {
     MyDB.getUserClaimsByOidcEmail,
     libauth.newSession(),
     libauth.setClaims(),
-    libauth.setTokens(),
+    //libauth.setTokens(),
     libauth.setCookie(),
     MyDB.updateSession,
     libauth.setCookieHeader(),
+    //libauth.catchErrorToQueryParams(),
     libauth.captureError(),
     libauth.redirectWithTokens("/#"),
+    //libauth.redirectWithError("/#"),
+    //libauth.redirectWithQuery("/#"),
   );
+
+  function redirectWithQuery(path) {
+    let redirectWithQuery = express.Router();
+    redirectWithQuery.use(function (err, req, res, next) {
+      // blah
+      // set query error
+    });
+    redirectWithQuery.use(function (req, res, next) {
+      // blah
+    });
+    return redirectWithQuery;
+  }
 
   //
   // For 'Implicit Grant' (Client-Side) Flow
