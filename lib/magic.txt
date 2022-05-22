@@ -1,0 +1,8 @@
+Rule:
+
+- Can be deleted at any time
+- Can exchange once with code
+- Can exchange once with receipt, only after code succeeds
+- Can't be canceled after success
+- Can't increment attempts after success
+- Increment on code or receipt failure

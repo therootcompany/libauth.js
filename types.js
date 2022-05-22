@@ -20,6 +20,100 @@
  * @property {String} trustedMaxAge
  */
 
+//
+// The Magic Code Gen/Verify Interface
+//
+
+/**
+ * @typedef MagicCodeGen
+ * @property {MagicCodeGenerator} generate
+ * @property {MagicCodeVerifier} verify
+ */
+
+/**
+ * @typedef {Function} MagicCodeGenerator
+ * @param {MagicCodeOpts} opts
+ * @returns {Promise<MagicParts>}
+ */
+
+/**
+ * @typedef {Function} MagicCodeVerifier
+ * @param {MagicParams} params
+ * @returns {Promise<Boolean>}
+ */
+
+//
+// The Magic Flow Interface
+//
+
+/**
+ * @typedef MagicCodeFlow
+ * @property {MagicFlowInit} initialize - Convert id, receipt, & code to an order
+ * @property {MagicFlowValidate} assertValid
+ * @property {MagicFlowRedeem} redeem
+ * @property {Function} increment - function (order) TODO
+ * @property {MagicFlowCancel} cancel
+ */
+
+/**
+ * @typedef {Function} MagicFlowInit
+ * @param {MagicParts} parts
+ * @param {MagicDevice} device
+ * @param {MagicRequest} request
+ * @returns {Promise<MagicOrder>}
+ */
+
+/**
+ * @typedef {Function} MagicFlowValidate
+ * @param {Boolean} verified
+ * @param {MagicOrder} order
+ * @param {MagicParams} params
+ * @param {MagicDevice} device
+ * @returns {Promise<Boolean>}
+ * @throws
+ */
+
+/**
+ * @typedef {Function} MagicFlowRedeem
+ * @param {Boolean} verified
+ * @param {MagicOrder} order
+ * @param {MagicParams} params
+ * @param {MagicDevice} device
+ * @returns {Promise<MagicOrder>}
+ * @throws
+ */
+
+/**
+ * @typedef {Function} MagicFlowCancel
+ * @param {MagicOrder} order
+ * @param {MagicParams} params
+ * @param {MagicDevice} device
+ * @returns {Promise<MagicOrder>}
+ * @throws
+ */
+
+//
+// The Magic Storage Interface
+//
+
+/**
+ * @typedef MagicCodeStore
+ * @property {MagicCodeStoreGet} get
+ * @property {MagicCodeStoreSet} set
+ */
+
+/**
+ * @typedef {Function} MagicCodeStoreGet
+ * @param {MagicParams & MagicRequest} order
+ * @returns {Promise<MagicOrder>}
+ */
+
+/**
+ * @typedef {Function} MagicCodeStoreSet
+ * @param {MagicOrder} order
+ * @returns {Promise<void>}
+ */
+
 /**
  * Makes the given route handler async/await and Promise friendly.
  *
@@ -243,13 +337,6 @@
  */
 
 /**
- * @typedef MagicAssertOpts
- * @property {Boolean} [failedValidation]
- * @property {Boolean} requireExchange
- * @property {Number} [timestamp]
- */
-
-/**
  * @typedef MagicVerifierOpts
  * @property {String} duration
  * @property {Number} maxAttempts
@@ -269,17 +356,19 @@
 /**
  * @typedef MagicOrder
  * @property {String} id
- * @property {String} [receipt]
- * @property {MagicIdentifier} [identifier]
+ * @property {String} receipt
+ * @property {MagicIdentifier} identifier
  * @property {any} [state]
+ * @property {any} [custom] - TODO
  * @property {Number} attempts
- * @property {String} [duration]
- * @property {String} [expires_at]
+ * @property {String} duration
+ * @property {String} expires_at
  * @property {String} [canceled_at]
  * @property {String} [canceled_by]
  * @property {String} [canceled_ip]
  * @property {String} [exchanged_at]
- * @property {String} [ordered_at]
+ * @property {String} [finalized_at]
+ * @property {String} ordered_at
  * @property {String} [ordered_by]
  * @property {String} [ordered_ip]
  * @property {String} [verified_at]
@@ -298,6 +387,7 @@
  * @property {String} [canceled_at]
  * @property {String} [canceled_by]
  * @property {String} [exchanged_at]
+ * @property {String} [finalized_at]
  * @property {String} [ordered_at]
  * @property {String} [ordered_by]
  * @property {String} [verified_at]
@@ -305,7 +395,7 @@
  */
 
 /**
- * @typedef MagicResponse
- * @property {MagicOrder} order
- * @property {MagicStatus} status
+ * @typedef MagicValidations
+ * @property {Boolean?} code
+ * @property {Boolean?} receipt
  */
