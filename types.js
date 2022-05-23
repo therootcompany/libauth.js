@@ -308,19 +308,19 @@
  */
 
 /**
- * @typedef MagicRequest
+ * @typedef {Object} MagicRequest
  * @property {MagicIdentifier} identifier
  * @property {any} state
  */
 
 /**
- * @typedef MagicDevice
+ * @typedef {Object} MagicDevice
  * @property {String} ip
  * @property {String} userAgent
  */
 
 /**
- * @typedef MagicParams
+ * @typedef {Object} MagicParams
  * @property {String} id
  * @property {String} [code]
  * @property {String} [receipt]
@@ -334,6 +334,14 @@
  * @property {String} id
  * @property {String} code
  * @property {String} receipt
+ */
+
+/**
+ * @typedef Challenge
+ * @property {MagicDevice} device
+ * @property {MagicOrder} order
+ * @property {MagicParams} params
+ * @property {MagicRequest} request
  */
 
 /**
@@ -361,6 +369,7 @@
  * @property {any} [state]
  * @property {any} [custom] - TODO
  * @property {Number} attempts
+ * @property {String} [deleted_at]
  * @property {String} duration
  * @property {String} expires_at
  * @property {String} [canceled_at]
@@ -382,6 +391,7 @@
  * @property {String} [receipt]
  * @property {String} status
  * @property {any} [state]
+ * @property {String} [deleted_at]
  * @property {String} [duration]
  * @property {String} [expires_at]
  * @property {String} [canceled_at]

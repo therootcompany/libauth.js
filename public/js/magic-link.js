@@ -44,7 +44,7 @@
   }
 
   async function requestVerification(email) {
-    let resp = await window.fetch(baseUrl + "/api/authn/challenge/order", {
+    let resp = await window.fetch(baseUrl + "/api/authn/challenge", {
       method: "POST",
       headers: {
         //Authorization: "Bearer " + (result.id_token || result.access_token),
@@ -69,27 +69,35 @@
     return resp;
   }
 
-  async function checkStatus({ secret = "", receipt = "", id = "" }) {
+  async function checkStatus({ code = "", receipt = "", id = "" }) {
+    let query = {};
+    if (receipt) {
+      query.receipt = receipt;
+    }
+    if (code) {
+      query.code = code;
+    }
+
     let resp = await window.fetch(
-      `${baseUrl}/api/authn/challenge/status` +
-        `?id=${id}` +
-        `&receipt=${receipt}` +
-        `&token=${secret}`,
+      `${baseUrl}/api/authn/challenge/${id}?` +
+        new URLSearchParams(query).toString(),
       {},
     );
 
     let body = await resp.json();
     resp.data = body;
+
+    if (!resp.data.status || !resp.ok) {
+      console.warn("Failed to check status:");
+      console.warn(resp.data);
+      throw new Error("failed to check status");
+    }
+
     return resp;
   }
 
-  async function finalizeVerification({ secret, receipt, id, trust }) {
-    let url;
-    if (secret) {
-      url = `${baseUrl}/api/authn/challenge/finalize`;
-    } else {
-      url = `${baseUrl}/api/authn/challenge/exchange`;
-    }
+  async function finalizeVerification({ code, receipt, id, trust }) {
+    let url = `${baseUrl}/api/authn/session/challenge/${id}`;
 
     let resp = await window.fetch(url, {
       method: "POST",
@@ -98,7 +106,7 @@
       },
       body: JSON.stringify({
         receipt,
-        token: secret,
+        code,
         id,
         trust_device: trust,
       }),
@@ -129,11 +137,18 @@
 
     let resp = await requestVerification(email).catch(die);
 
+    if (!resp.data.id || !resp.data.receipt) {
+      console.warn("Failed to send verification code:");
+      console.warn(resp.data);
+      alert("failed to send verification code");
+      return;
+    }
+
     if (resp.data._development_secret) {
       let link =
         `${baseUrl}#login` +
         `?id=${resp.data.id}` +
-        `&token=${resp.data._development_secret}`;
+        `&code=${resp.data._development_secret}`;
       $("a.js-magic-dev-link").href = link;
       $("a.js-magic-dev-link").innerText = link;
       $("a.js-magic-dev-link").hidden = false;
@@ -171,12 +186,12 @@
     }
   });
 
-  // look for #login?token=
+  // look for #login?code=
   async function continueLogin() {
     var querystring = document.location.hash.slice("#login?".length);
     var query = parseQuerystring(querystring);
-    // TODO let's call this secret_token or verify_token or some such
-    if (!query.token) {
+    // TODO let's call this secret_code or verify_code or some such
+    if (!query.code) {
       return;
     }
 
@@ -186,18 +201,18 @@
     window.history.pushState(
       "",
       document.title,
-      // remove the hash with token from browser url bar
+      // remove the hash with code from browser url bar
       window.location.pathname + window.location.search,
     );
 
     // TODO loading spinner
     $("form.js-magic-info").hidden = false;
 
-    let resp = await checkStatus({ id: query.id, secret: query.token });
-    // Show the token for easy capture
+    let resp = await checkStatus({ id: query.id, code: query.code });
+    // Show the code for easy capture
     console.log("magic info:", resp.data);
     if (!resp.data.ordered_by) {
-      window.alert("invalid token");
+      window.alert("invalid code");
       return;
     }
 
@@ -210,10 +225,10 @@
     } else {
       $(".js-login-message").innerText = resp.data.ordered_by;
     }
-    await promptRememberDevice({ secret: query.token, id: query.id });
+    await promptRememberDevice({ code: query.code, id: query.id });
   }
 
-  async function promptRememberDevice({ secret, receipt, id }) {
+  async function promptRememberDevice({ code, receipt, id }) {
     $("form.js-magic-info").hidden = false;
 
     return new Promise(function (resolve, reject) {
@@ -227,7 +242,7 @@
         ev.stopPropagation();
 
         // TODO change this if the default is to NOT trust
-        await finalizeVerification({ secret, receipt, id, trust: true })
+        await finalizeVerification({ code, receipt, id, trust: true })
           .then(dashboardOrClose)
           .catch(die)
           .then(resolve)
@@ -239,7 +254,7 @@
         ev.preventDefault();
         ev.stopPropagation();
 
-        await finalizeVerification({ receipt, secret, trust: false })
+        await finalizeVerification({ receipt, code, trust: false })
           .then(dashboardOrClose)
           .catch(die)
           .then(resolve)

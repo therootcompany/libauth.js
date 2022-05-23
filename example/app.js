@@ -40,7 +40,7 @@ async function main() {
     };
   }
 
-  MyDB.updateSession = async function (req, res, next) {
+  MyDB.invalidateOldSession = async function (req, res, next) {
     async function mw() {
       // Invalidate the old session, if any
       let sessionId = libauth.get(req, "currentSessionClaims")?.jti;
@@ -48,6 +48,15 @@ async function main() {
         //await DB.Session.set({ id: sessionId, deleted_at: new Date() });
       }
 
+      next();
+    }
+
+    // (shim for adding await support to express)
+    Promise.resolve().then(mw).catch(next);
+  };
+
+  MyDB.saveNewSession = async function (req, res, next) {
+    async function mw() {
       // Save the new session
       let newSessionClaims = libauth.get(req, "sessionClaims");
       if (!newSessionClaims) {
@@ -165,7 +174,7 @@ async function main() {
     },
   };
 
-  MyDB.notify = async function (req, res, next) {
+  MyDB.sendCodeToUser = async function (req, res, next) {
     let vars = libauth.get(req, "challenge");
     //let vars = req.authn;
     // Notify via CLI
@@ -240,10 +249,10 @@ async function main() {
     },
   */
 
-  if (MyDB.notify) {
+  if (MyDB.sendCodeToUser) {
     // Magic Link (challenge-based auth)
     let magic = libauth.challenge({
-      store: memstore,
+      Store: memstore,
       duration: "24h",
       maxAttempts: 5,
       magicSalt: privkey.d,
@@ -261,7 +270,7 @@ async function main() {
 
     // TODO websocket so you don't have to poll
     app.get(
-      "/api/authn/challenge",
+      "/api/authn/challenge/:id",
       magic.readParams,
       magic.getChallenge,
       magic.checkStatus,
@@ -269,7 +278,7 @@ async function main() {
     );
 
     app.post(
-      "/api/authn/session/challenge",
+      "/api/authn/session/challenge/:id",
       magic.readParams,
       magic.getChallenge,
       magic.checkStatus,
@@ -336,11 +345,29 @@ async function main() {
         libauth.setCookieHeader(),
         //libauth.catchErrorToQueryParams(),
         libauth.captureError(),
+        //libauth.setErrorAsQuery(),
         libauth.redirectWithQuery("/#"),
-        //libauth.redirectWithError("/#"),
         //libauth.redirectWithQuery("/#"),
       );
     }
+
+    //
+    // For 'Implicit Grant' (Client-Side) Flow
+    // (requires `clientId` only)
+    //
+    app.post(
+      "/api/authn/session/oidc/accounts.google.com/token",
+      googleOidc.verifyToken,
+      MyDB.getUserClaimsByOidcEmail,
+      libauth.newSession(),
+      libauth.initClaims(),
+      libauth.initCookie(),
+      libauth.initTokens(),
+      MyDB.invalidateOldSession,
+      MyDB.saveNewSession,
+      libauth.setCookieHeader(),
+      libauth.sendTokens(),
+    );
   }
 
   function redirectWithQuery(path) {
@@ -354,24 +381,6 @@ async function main() {
     });
     return redirectWithQuery;
   }
-
-  //
-  // For 'Implicit Grant' (Client-Side) Flow
-  // (requires `clientId` only)
-  //
-  app.post(
-    "/api/authn/session/oidc/accounts.google.com/token",
-    googleOidc.verifyToken,
-    MyDB.getUserClaimsByOidcEmail,
-    libauth.newSession(),
-    libauth.initClaims(),
-    libauth.initCookie(),
-    libauth.initTokens(),
-    MyDB.invalidateOldSession,
-    MyDB.saveNewSession,
-    libauth.setCookieHeader(),
-    libauth.sendTokens(),
-  );
 
   // TODO let gh = require('@libauth/github').create()
   /*
@@ -432,7 +441,7 @@ async function main() {
     // "/api/session",
     "/api/authn/session",
     libauth.readCookie(),
-    MyDB.updateSession,
+    MyDB.invalidateOldSession,
     libauth.expireCookie(),
     libauth.sendOk({ success: true }),
     libauth.sendError({ success: true }),
