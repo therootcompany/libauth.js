@@ -184,7 +184,7 @@ async function main() {
       text:
         `Enter this login code when prompted: ${vars.code}. \n` +
         // `Or login with this link: ${vars.iss}/login/#/${vars.id}/${vars.code}`,
-        `Or login with this link: ${issuer}/#login?id=${vars.order.id}&token=${vars.code}`,
+        `Or login with this link: ${issuer}/#login?id=${vars.order.id}&code=${vars.code}`,
     });
 
     next();
