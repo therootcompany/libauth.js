@@ -210,21 +210,7 @@ async function main() {
   let cookieSecret = process.env.HMAC_SECRET || process.env.COOKIE_SECRET;
   app.use("/api/authn", cookieParser(cookieSecret)); // needed to set cookies?
 
-  //
-  // /api/session/token/
-  //
-  // /api/session/credentials/token
-  // /api/redirect/oidc/accounts.google.com/auth
-  // /api/session/oidc/accounts.google.com/code
-  // /api/session/oidc/accounts.google.com/token
-
   //app.use("/api/authn/", libauth.initialize());
-
-  /*
-    libauth.credentials({});
-    libauth.google({ clientId: 'xxxx' });
-    app.use('/api/authn', libauth.routes())
-  */
 
   app.post(
     "/api/authn/session/credentials",
@@ -240,16 +226,6 @@ async function main() {
     libauth.sendTokens(),
   );
 
-  /*
-    // TODO MFA
-    async function checkForMfa(req, res, next) {
-      let user = DB.get(...)
-      //req.authn.state.mfa = user.requires_mfa;
-      req.body.state.mfa = user.requires_mfa;
-      next();
-    },
-  */
-
   if (MyDB.sendCodeToUser) {
     // Magic Link (challenge-based auth)
     let magic = libauth.challenge({
@@ -259,7 +235,6 @@ async function main() {
       magicSalt: privkey.d,
     });
 
-    // TODO how to embed redirect to resource?
     app.post(
       "/api/authn/challenge",
       magic.readParams,
@@ -275,6 +250,7 @@ async function main() {
       magic.readParams,
       magic.getChallenge,
       magic.checkStatus,
+      magic.saveFailedChallenge,
       magic.sendStatus,
     );
 
@@ -296,8 +272,6 @@ async function main() {
       MyDB.expireCurrentSession,
       MyDB.saveNewSession,
       libauth.setCookieHeader(),
-
-      magic.saveChallenge,
       libauth.sendTokens(),
     );
 
@@ -306,17 +280,12 @@ async function main() {
       magic.readParams,
       magic.getChallenge,
       magic.checkStatus,
+      magic.saveFailedChallenge,
       magic.cancelChallenge,
       magic.saveChallenge,
       magic.sendStatus,
     );
   }
-
-  /*
-  magicRoutes.exchange
-
-  magicRoutes.cancelChallenge
-  */
 
   // Google Sign In
   if (process.env.GOOGLE_CLIENT_ID) {
@@ -325,8 +294,7 @@ async function main() {
       require("../plugins/oidc-google/")({
         clientId: process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-        //redirectUri: "/api/session/oidc/accounts.google.com/code",
-        redirectUri: "/api/authn/session/oidc/accounts.google.com/redirect",
+        redirectUri: "/api/authn/session/oidc/accounts.google.com/code",
       }),
     );
 
@@ -341,24 +309,20 @@ async function main() {
         googleOidc.redirectToAuthUrl,
       );
       app.get(
-        //"/api/session/oidc/accounts.google.com/code",
-        "/api/authn/session/oidc/accounts.google.com/redirect",
+        "/api/session/oidc/accounts.google.com/code",
         googleOidc.readCodeParams,
         googleOidc.requestToken,
         googleOidc.verifyToken,
         MyDB.getUserClaimsByOidcEmail,
         libauth.newSession(),
         libauth.initClaims(),
-        //libauth.initTokens(),
+        libauth.initTokens(),
         libauth.initCookie(),
         MyDB.expireCurrentSession,
         MyDB.saveNewSession,
         libauth.setCookieHeader(),
-        //libauth.catchErrorToQueryParams(),
         libauth.captureError(),
-        //libauth.setErrorAsQuery(),
         libauth.redirectWithQuery("/#"),
-        //libauth.redirectWithQuery("/#"),
       );
     }
 
@@ -413,28 +377,6 @@ async function main() {
   app.get("/api/authn/webhooks/oauth2/github.com/userinfo", gh.userinfo);
   */
 
-  app.post(
-    // "/api/session/token",
-    "/api/authn/refresh",
-    libauth.requireCookie(),
-    //libauth.verifySession(),
-    MyDB.getUserClaimsBySub,
-    libauth.refresh(), // TODO refreshIdToken, verifySession
-    libauth.initClaims(),
-    libauth.initTokens(),
-    libauth.sendTokens(),
-  );
-
-  app.post(
-    "/api/authn/exchange",
-    libauth.requireBearerClaims(),
-    MyDB.getUserClaimsBySub,
-    libauth.exchange(), // TODO verifyBearer
-    libauth.initClaims(),
-    libauth.initTokens(),
-    libauth.sendTokens(),
-  );
-
   // Logout (delete session cookie)
   app.delete(
     // "/api/session",
@@ -444,6 +386,26 @@ async function main() {
     libauth.expireCookie(),
     libauth.sendOk({ success: true }),
     libauth.sendError({ success: true }),
+  );
+
+  // Refresh ID Token via Session
+  app.post(
+    "/api/authn/session/id_token",
+    libauth.requireCookie(),
+    MyDB.getUserClaimsBySub,
+    libauth.initClaims({ idClaims: {} }),
+    libauth.initTokens(),
+    libauth.sendTokens(),
+  );
+
+  // Exchange Access Token via ID Token
+  app.post(
+    "/api/authn/access_token",
+    libauth.requireBearerClaims(),
+    MyDB.getUserClaimsBySub,
+    libauth.initClaims({ accessClaims: {} }),
+    libauth.initTokens(),
+    libauth.sendTokens(),
   );
 
   app.use("/.well-known/openid-configuration", libauth.wellKnownOidc());

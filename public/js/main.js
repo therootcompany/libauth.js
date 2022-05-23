@@ -118,7 +118,7 @@
 
   async function attemptRefresh() {
     let resp = await window
-      .fetch(baseUrl + "/api/authn/refresh", { method: "POST" })
+      .fetch(baseUrl + "/api/authn/session/id_token", { method: "POST" })
       .catch(noop);
     if (!resp) {
       return;
