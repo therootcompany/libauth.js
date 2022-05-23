@@ -115,7 +115,9 @@ async function main() {
   };
 
   MyDB.getUserClaimsByIdentifier = async function (req, res, next) {
-    let email = libauth.get(req, "identifier").value;
+    let challenge = libauth.get(req, "challenge");
+
+    let email = challenge.order?.identifier?.value;
 
     // get a new session
     // TODO check if it's actually email!
@@ -309,7 +311,7 @@ async function main() {
         googleOidc.redirectToAuthUrl,
       );
       app.get(
-        "/api/session/oidc/accounts.google.com/code",
+        "/api/authn/session/oidc/accounts.google.com/code",
         googleOidc.readCodeParams,
         googleOidc.requestToken,
         googleOidc.verifyToken,
