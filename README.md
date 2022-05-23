@@ -1077,6 +1077,10 @@ rather than potentially ambiguous sugar-coated terms.
 | `id_token`      | A JWT with information about the user, such `given_name`      |
 | `access_token`  | A JWT with information about an account or resource           |
 | `refresh_token` | A long-lived JWT, stored in a session cookie (or config file) |
+| `amr`           | The list of methods used for Multi-Factor Authentication      |
+| `acr`           | For specifying [LoA Profiles][loa] (mostly useless)           |
+
+[loa]: https://www.iana.org/assignments/loa-profiles/loa-profiles.xhtml
 
 ## Design Decisions
 

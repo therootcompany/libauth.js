@@ -10,6 +10,7 @@ async function main() {
   let app = require("@root/async-router").Router();
 
   let LibAuth = require("../");
+
   let issuer = process.env.BASE_URL || `http://localhost:${process.env.PORT}`;
   let privkey = JSON.parse(await Fs.readFile("./key.jwk.json", "utf8"));
   let libauth = LibAuth.create(issuer, privkey, {
@@ -40,7 +41,7 @@ async function main() {
     };
   }
 
-  MyDB.invalidateOldSession = async function (req, res, next) {
+  MyDB.expireCurrentSession = async function (req, res, next) {
     async function mw() {
       // Invalidate the old session, if any
       let sessionId = libauth.get(req, "currentSessionClaims")?.jti;
@@ -233,7 +234,7 @@ async function main() {
     libauth.initClaims(),
     libauth.initTokens(),
     libauth.initCookie(),
-    MyDB.invalidateOldSession,
+    MyDB.expireCurrentSession,
     MyDB.saveNewSession,
     libauth.setCookieHeader(),
     libauth.sendTokens(),
@@ -263,8 +264,8 @@ async function main() {
       "/api/authn/challenge",
       magic.readParams,
       magic.generateChallenge,
-      magic.saveChallenge,
       MyDB.sendCodeToUser,
+      magic.saveChallenge,
       magic.sendReceipt,
     );
 
@@ -292,12 +293,22 @@ async function main() {
       libauth.initClaims(),
       libauth.initTokens(),
       libauth.initCookie(),
-      MyDB.invalidateOldSession,
+      MyDB.expireCurrentSession,
       MyDB.saveNewSession,
       libauth.setCookieHeader(),
 
       magic.saveChallenge,
       libauth.sendTokens(),
+    );
+
+    app.delete(
+      "/api/authn/session/challenge/:id",
+      magic.readParams,
+      magic.getChallenge,
+      magic.checkStatus,
+      magic.cancelChallenge,
+      magic.saveChallenge,
+      magic.sendStatus,
     );
   }
 
@@ -340,7 +351,7 @@ async function main() {
         libauth.initClaims(),
         //libauth.initTokens(),
         libauth.initCookie(),
-        MyDB.invalidateOldSession,
+        MyDB.expireCurrentSession,
         MyDB.saveNewSession,
         libauth.setCookieHeader(),
         //libauth.catchErrorToQueryParams(),
@@ -363,23 +374,11 @@ async function main() {
       libauth.initClaims(),
       libauth.initCookie(),
       libauth.initTokens(),
-      MyDB.invalidateOldSession,
+      MyDB.expireCurrentSession,
       MyDB.saveNewSession,
       libauth.setCookieHeader(),
       libauth.sendTokens(),
     );
-  }
-
-  function redirectWithQuery(path) {
-    let redirectWithQuery = express.Router();
-    redirectWithQuery.use(function (err, req, res, next) {
-      // blah
-      // set query error
-    });
-    redirectWithQuery.use(function (req, res, next) {
-      // blah
-    });
-    return redirectWithQuery;
   }
 
   // TODO let gh = require('@libauth/github').create()
@@ -441,7 +440,7 @@ async function main() {
     // "/api/session",
     "/api/authn/session",
     libauth.readCookie(),
-    MyDB.invalidateOldSession,
+    MyDB.expireCurrentSession,
     libauth.expireCookie(),
     libauth.sendOk({ success: true }),
     libauth.sendError({ success: true }),

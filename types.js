@@ -25,9 +25,11 @@
 //
 
 /**
+ * The Magic Code Generator and Validator
+ *
  * @typedef MagicCodeGen
  * @property {MagicCodeGenerator} generate
- * @property {MagicCodeVerifier} verify
+ * @property {MagicCodeValidator} validate
  */
 
 /**
@@ -37,9 +39,12 @@
  */
 
 /**
- * @typedef {Function} MagicCodeVerifier
+ * @typedef {Function} MagicCodeValidator
+ * @param {MagicOrder} order
  * @param {MagicParams} params
- * @returns {Promise<Boolean>}
+ * @param {Number} [receiptByteCount]
+ * @param {BufferEncoding} [receiptEncoding]
+ * @returns {Promise<MagicValidations>}
  */
 
 //
@@ -51,7 +56,7 @@
  * @property {MagicFlowInit} initialize - Convert id, receipt, & code to an order
  * @property {MagicFlowValidate} assertValid
  * @property {MagicFlowRedeem} redeem
- * @property {Function} increment - function (order) TODO
+ * @property {MagicFlowFail} handleFailure
  * @property {MagicFlowCancel} cancel
  */
 
@@ -76,6 +81,17 @@
 /**
  * @typedef {Function} MagicFlowRedeem
  * @param {Boolean} verified
+ * @param {MagicOrder} order
+ * @param {MagicParams} params
+ * @param {MagicDevice} device
+ * @returns {Promise<MagicOrder>}
+ * @throws
+ */
+
+/**
+ * TODO change name to fail?
+ *
+ * @typedef {Function} MagicFlowFail
  * @param {MagicOrder} order
  * @param {MagicParams} params
  * @param {MagicDevice} device
@@ -274,33 +290,6 @@
  */
 
 /**
- * The Magic Code Generator
- * @namespace MagicCodeGen
- */
-
-/**
- * Finalizes and returns the "Magic Link" within the login flow.
- * @memberof MagicCodeGen
- * @name generate
- * @function
- * @param {Number} codeBytes
- * @param {String} codeEnc
- * @param {Number} idBytes
- * @param {String} idEnc
- * @return {MagicParts}
- */
-
-/**
- * Finalizes and returns the "Magic Link" within the login flow.
- * @memberof MagicCodeGen
- * @name verify
- * @function
- * @param {MagicOrder} order
- * @param {String} code
- * @return {Boolean}
- */
-
-/**
  * @typedef MagicIdentifier
  * @property {String} [issuer]
  * @property {String} [type]
@@ -338,10 +327,12 @@
 
 /**
  * @typedef Challenge
+ * @property {String} code
  * @property {MagicDevice} device
  * @property {MagicOrder} order
  * @property {MagicParams} params
  * @property {MagicRequest} request
+ * @property {MagicValidations} validations
  */
 
 /**
@@ -359,6 +350,7 @@
  * @property {BufferEncoding} idEncoding
  * @property {Number} receiptByteCount
  * @property {BufferEncoding} receiptEncoding
+ * @returns {MagicParts}
  */
 
 /**
@@ -408,4 +400,5 @@
  * @typedef MagicValidations
  * @property {Boolean?} code
  * @property {Boolean?} receipt
+ * @property {Boolean} valid
  */
