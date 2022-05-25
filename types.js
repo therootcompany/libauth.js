@@ -298,9 +298,10 @@
 
 /**
  * @typedef {Object} MagicRequest
+ * @property {any} custom
+ * @property {String} duration
  * @property {MagicIdentifier} identifier
  * @property {any} state
- * @property {any} custom
  */
 
 /**
