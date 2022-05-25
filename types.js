@@ -300,6 +300,7 @@
  * @typedef {Object} MagicRequest
  * @property {MagicIdentifier} identifier
  * @property {any} state
+ * @property {any} custom
  */
 
 /**
