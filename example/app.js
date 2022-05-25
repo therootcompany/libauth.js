@@ -278,7 +278,7 @@ async function main() {
     );
 
     app.delete(
-      "/api/authn/session/challenge/:id",
+      "/api/authn/challenge/:id",
       magic.readParams,
       magic.getChallenge,
       magic.checkStatus,
