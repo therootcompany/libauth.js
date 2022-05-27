@@ -334,6 +334,7 @@
  * @property {MagicOrder} order
  * @property {MagicParams} params
  * @property {MagicRequest} request
+ * @property {MagicStatus} [status]
  * @property {MagicValidations} validations
  */
 
