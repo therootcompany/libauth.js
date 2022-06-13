@@ -1,10 +1,230 @@
-# auth3000
+# libauth.js
 
 > Modern, OpenID Connect compatible authentication.
 
 ```js
+// ...
+let LibAuth = require("libauth");
+let libauth = LibAuth.create(issuer, privkey, { cookiePath: "/api/authn/" });
+
+// ...
+app.use("/api/authn/session/credentials", setCookieByCredentials);
+app.use("/api/authn/session/id_token", sendIdTokenBySession);
+app.use("/api/authn/access_token", sendAccessTokenByIdToken);
+app.use("/api/authn/session", revokeCookieAndIdToken);
+
+app.use("/.well-known/openid-configuration", libauth.wellKnownOidc());
+app.use("/.well-known/jwks.json", libauth.wellKnownJwks());
+```
+
+# Features
+
+- [x] Standards-based session management
+  - [x] Long-lived refresh tokens (default 30d)
+  - [x] Long-lived session cookies (default 30d)
+  - [x] Short-lived id tokens (default 1d)
+  - [x] Short-lived access tokens (default 15m)
+- [x] Supports common login strategies
+  - [x] Credentials-based login (HTTP Basic Auth)
+  - [x] OIDC (OpenID Connect, OAuth2) login (Google Sign In, etc)
+  - [x] Challenge-Response (Magic Link)
+- [x] Idiomatic, Composable Express.js Routing
+
+# Installation
+
+Node.js:
+
+```bash
+curl https://webinstall.dev/node@v16 | bash
+export PATH="$HOME/.local/opt/node/bin:$PATH"
+```
+
+libauth:
+
+```bash
+npm install --save libauth@v0
+```
+
+Note: The v1 API is not yet locked. Some names may change. Any changes from
+v0.90.x on will be noted in migration notes.
+
+# Usage
+
+## Philosophy
+
+The goal of LibAuth is to _minimize magic_ (anything difficult to understand or
+configure), and _maximize control_, without sacrificing _ease-of-use_,
+convenience, or security.
+
+To do this we require **more copy-and-paste boilerplate** than other auth
+libraries - with the upside is that it's all just normal, easy-to-replace
+_middleware_ - hopefully nothing unexpected or constraining.
+
+You'll also notice that we try to use the proper, official technical language
+rather than potentially ambiguous sugar-coated terms (for example: 'cookie' or
+'token' when specificity is required, or 'session' when it could be either).
+
+## Prerequisites: Generate Secrets
+
+There's a few keys, secrets, and salts that you'll need. Here's how you can
+generate them:
+
+0. Install `keypairs` and `jq`:
+   ```bash
+   curl https://webinstall.dev/jq@1 | bash
+   curl https://webinstall.dev/keypairs@0 | bash
+   export PATH="$HOME/.local/bin:$PATH"
+   ```
+   (follow the instructions in the output)
+1. Generate the `PRIVATE_KEY`:
+
+   ```bash
+   keypairs gen --key key.jwk.json --pub pub.jwk.json
+
+   echo "PRIVATE_KEY='$(
+     cat ./pub.jwk.json | jq -c
+   )'" >> .env
+   ```
+
+2. Generate the `COOKIE_SECRET`:
+   ```bash
+   echo "COOKIE_SECRET='$(
+     node -e '
+       let rnd = crypto.randomBytes(16)
+           .toString("base64")
+           .replace(/\+/g, "-")
+           .replace(/\//g, "_")
+           .replace(/=/g, "");
+       console.info(rnd);
+     '
+   )'" >> .env
+   ```
+3. Generate the `MAGIC_SALT`:
+   ```bash
+   echo "MAGIC_SALT='$(
+     node -e '
+       let rnd = crypto.randomBytes(16)
+           .toString("base64")
+           .replace(/\+/g, "-")
+           .replace(/\//g, "_")
+           .replace(/=/g, "");
+       console.info(rnd);
+     '
+   )'" >> .env
+   ```
+
+## 1. Top-Level Routes
+
+```js
+"use strict";
+
+let FsSync = require("fs");
+
+let LibAuth = require("libauth");
+
+let issuer = process.env.BASE_URL || `http://localhost:${process.env.PORT}`;
+let privkey = JSON.parse(FsSync.readFileSync("./key.jwk.json", "utf8"));
+
+let bodyParser = require("body-parser");
+app.use("/api/authn", bodyParser.json({ limit: "100kb" }));
+
+let cookieParser = require("cookie-parser");
+let cookieSecret = process.env.COOKIE_SECRET;
+app.use("/api/authn/session", cookieParser(cookieSecret));
+
+let libauth = LibAuth.create(issuer, privkey, {
+  cookiePath: "/api/authn/",
+  /*
+    refreshCookiePath: "/api/authn/",
+    accessCookiePath: "/api/assets/",
+    */
+});
+
+let Router = require("express").Router;
+
+// Create session by login credentials
+let setCookieByCredentials = Router().post(
+  "/",
+  libauth.readCredentials(),
+  MyDB.getUserClaimsByPassword,
+  libauth.newSession(),
+  libauth.initClaims(),
+  libauth.initTokens(),
+  libauth.initCookie(),
+  MyDB.expireCurrentSession,
+  MyDB.saveNewSession,
+  libauth.setCookieHeader(),
+  libauth.sendTokens(),
+);
+
+// Refresh ID Token via Session
+let sendIdTokenBySession = Router().post(
+  "/",
+  libauth.requireCookie(),
+  MyDB.getUserClaimsBySub,
+  libauth.initClaims({ idClaims: {} }),
+  libauth.initTokens(),
+  libauth.sendTokens(),
+);
+
+// Exchange Access Token via ID Token
+let sendAccessTokenByIdToken = Router().post(
+  "/",
+  libauth.requireBearerClaims(),
+  MyDB.getUserClaimsBySub,
+  libauth.initClaims({ accessClaims: {} }),
+  libauth.initTokens(),
+  libauth.sendTokens(),
+);
+
+// Logout (delete session cookie)
+let revokeCookieAndIdToken = Router().delete(
+  "/",
+  libauth.readCookie(),
+  MyDB.expireCurrentSession,
+  libauth.expireCookie(),
+  libauth.sendOk({ success: true }),
+  libauth.sendError({ success: true }),
+);
+
+app.use("/api/authn/session/credentials", setCookieByCredentials);
+app.use("/api/authn/session/id_token", sendIdTokenBySession);
+app.use("/api/authn/access_token", sendAccessTokenByIdToken);
+app.use("/api/authn/session", revokeCookieAndIdToken);
+
+app.use("/.well-known/openid-configuration", libauth.wellKnownOidc());
+app.use("/.well-known/jwks.json", libauth.wellKnownJwks());
+
+module.exports = app;
+```
+
+```js
+'use strict';
+
+require("dotenv").config({ path: ".env" });
+
+let Http = require("http");
+let Express = require("express");
+
+async main() {
+    let server = Express();
+    let app = new Express.Router();
+
+    let port = process.env.PORT || 3000;
+    Http.createServer(server).listen(port, function () {
+      /* jshint validthis:true */
+      console.info("Listening on", this.address());
+    });
+}
+
+main().catch(function (err) {
+  console.error(err);
+});
+```
+
+```js
 // Authenticate Users
-let Auth3000 = require("auth3000");
+let LibAuth = require("libauth");
 let issuer = "http://localhost:3000";
 let privkey = JSON.parse(fs.readFileSync("./key.jwk.json", "utf8"));
 let sessionMiddleware = Auth3000.create(issuer, privkey, {

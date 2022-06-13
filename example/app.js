@@ -1,12 +1,13 @@
 "use strict";
 
-async function main() {
-  require("dotenv").config({ path: ".env" });
-  require("dotenv").config({ path: ".env.secret" });
+require("dotenv").config({ path: ".env" });
+require("dotenv").config({ path: ".env.secret" });
 
-  let Fs = require("fs").promises;
-  let http = require("http");
-  let express = require("express");
+let Fs = require("fs").promises;
+let http = require("http");
+let express = require("express");
+
+async function main() {
   let app = require("@root/async-router").Router();
 
   let LibAuth = require("../");
