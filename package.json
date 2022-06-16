@@ -3,6 +3,9 @@
   "version": "0.20.1-pre.6",
   "description": "Modern, OpenID Connect compatible authentication.",
   "main": "index.js",
+  "bin": {
+    "libauth": "./bin/libauth.js"
+  },
   "files": [
     "@types",
     "lib",
