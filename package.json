@@ -1,6 +1,6 @@
 {
   "name": "libauth",
-  "version": "0.20.1-pre.6",
+  "version": "0.20.3-pre.7",
   "description": "Modern, OpenID Connect compatible authentication.",
   "main": "index.js",
   "bin": {
