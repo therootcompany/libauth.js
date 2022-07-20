@@ -39,7 +39,6 @@ app.use("/.well-known/jwks.json", libauth.wellKnownJwks());
   - libauth
 - [Philosophy](#philosophy)
 - [Usage](#usage)
-  -
 
 # Installation
 
