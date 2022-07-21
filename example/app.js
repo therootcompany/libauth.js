@@ -15,11 +15,11 @@ let privkey = JSON.parse(FsSync.readFileSync("./key.jwk.json", "utf8"));
 let app = express.Router();
 
 let libauth = LibAuth.create(issuer, privkey, {
-  cookiePath: "/api/authn/",
+  cookie: { path: "/api/authn/" },
   /*
     refreshCookiePath: "/api/authn/",
     accessCookiePath: "/api/assets/",
-    */
+  */
 });
 
 let MyAuth = require("./my-auth.js");

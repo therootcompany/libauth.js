@@ -5,7 +5,9 @@
 ```js
 // ...
 let LibAuth = require("libauth");
-let libauth = LibAuth.create(issuer, privkey, { cookiePath: "/api/authn/" });
+let libauth = LibAuth.create(issuer, privkey, {
+  cookies: { path: "/api/authn/" },
+});
 
 // ...
 app.post("/api/authn/session/credentials", setCookieByCredentials);
@@ -153,7 +155,7 @@ let cookieSecret = process.env.COOKIE_SECRET;
 app.use("/api/authn/session", cookieParser(cookieSecret));
 
 let authRoutes = require("./auth-routes.js").create(issuer, privkey, {
-  cookiePath: "/api/authn/session/",
+  cookies: { path: "/api/authn/session/", sameSite: "strict" },
 });
 
 app.post("/api/authn/session/credentials", authRoutes.setCookieByCredentials);
@@ -179,7 +181,10 @@ AuthRoutes.create = function () {
   let authRoutes = {};
 
   let libauth = LibAuth.create(issuer, privkey, {
-    cookiePath: "/api/authn/",
+    cookies: {
+      path: "/api/authn/",
+      sameSite: "strict",
+    },
     /*
     refreshCookiePath: "/api/authn/",
     accessCookiePath: "/api/assets/",
