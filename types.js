@@ -11,7 +11,8 @@
  * @property {String} accessMaxAge
  * @property {String} authnParam
  * @property {String} cookieName
- * @property {String} cookiePath
+ * @property {String} [cookiePath]
+ * @property {import('express').CookieOptions} [cookies]
  * @property {String} idMaxAge
  * @property {String} issuer
  * x@property {String} magicSalt -
