@@ -1,3 +1,5 @@
+module.exports._typesOnly = true;
+
 /**
  * @typedef LibAuth
  * @property {PromisifyHandler} promisifyHandler
