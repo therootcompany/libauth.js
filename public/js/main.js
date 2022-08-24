@@ -6,7 +6,7 @@
 
   // scheme => 'https:'
   // host => 'localhost:3000'
-  // pathname => '/api/authn/session/oidc/google.com'
+  // pathname => '/api/authn/session/oidc/accounts.google.com'
   let baseUrl = document.location.protocol + "//" + document.location.host;
 
   // AJQuery
@@ -21,7 +21,7 @@
     window.alert(
       "Oops! There was an unexpected error on the server.\nIt's not your fault.\n\n" +
         "Technical Details for Tech Support: \n" +
-        err.message
+        err.message,
     );
     throw err;
   }
@@ -47,7 +47,7 @@
     client_id,
     redirect_uri,
     scope,
-    login_hint
+    login_hint,
   ) {
     // a secure-enough random state value
     // (all modern browsers use crypto random Math.random, not that it much matters for a client-side state cache)
@@ -73,7 +73,7 @@
     client_id,
     redirect_uri,
     scopes,
-    login_hint
+    login_hint,
   ) {
     // <!-- redirect_uri=encodeURIComponent("https://beyondcode.duckdns.org/api/webhooks/oauth2/github") -->
     // <!-- scope=encodeURIComponent("read:user%20user:email") -->
@@ -118,7 +118,7 @@
 
   async function attemptRefresh() {
     let resp = await window
-      .fetch(baseUrl + "/api/authn/refresh", { method: "POST" })
+      .fetch(baseUrl + "/api/authn/session/id_token", { method: "POST" })
       .catch(noop);
     if (!resp) {
       return;
@@ -150,6 +150,15 @@
   }
 
   function parseQuerystring(querystring) {
+    for (;;) {
+      let first = querystring[0];
+      if (!["#", "/", "?"].includes(first)) {
+        break;
+      }
+      querystring = querystring.slice(1);
+    }
+
+    // TODO maybe use URLSearchParams(str)?
     var query = {};
     querystring.split("&").forEach(function (pairstring) {
       var pair = pairstring.split("=");
@@ -182,7 +191,7 @@
       "https://accounts.google.com/o/oauth2/v2/auth",
       ENV.GOOGLE_CLIENT_ID,
       ENV.GOOGLE_REDIRECT_URI,
-      "email profile"
+      "email profile",
       // "JOHN.DOE@EXAMPLE.COM"
     );
     $(".js-google-oidc-url").href = googleSignInUrl;
@@ -191,7 +200,7 @@
       "https://github.com/login/oauth/authorize",
       ENV.GITHUB_CLIENT_ID,
       ENV.GITHUB_REDIRECT_URI,
-      ["read:user", "user:email"]
+      ["read:user", "user:email"],
     );
     $(".js-github-oauth2-url").href = githubSignInUrl;
 
@@ -233,16 +242,22 @@
     return;
   }
 
+  // removes the signature (which is the secret part)
+  function redactJwt(jwt) {
+    // aaaa.bbbb.cccc = > aaaa.bbbb.[redacted]
+    return jwt.split(".").slice(0, 2).join(".") + ".[redacted]";
+  }
+
   async function completeOauth2SignIn(query) {
     // nix token from browser history
     window.history.pushState(
       "",
       document.title,
-      window.location.pathname + window.location.search
+      window.location.pathname + window.location.search,
     );
 
     // Show the token for easy capture
-    console.info("access_token", query.access_token);
+    console.info("access_token", redactJwt(query.access_token));
 
     if ("github.com" === query.issuer) {
       // TODO this is moot. We could set the auth cookie at time of redirect
@@ -255,7 +270,7 @@
             language: window.navigator.language,
           }),
           headers: {
-            Authorization: query.access_token,
+            Authorization: `Bearer ${query.access_token}`,
             "Content-Type": "application/json",
           },
         })
@@ -275,21 +290,31 @@
     window.history.pushState(
       "",
       document.title,
-      window.location.pathname + window.location.search
+      window.location.pathname + window.location.search,
     );
 
     // Show the token for easy capture
-    console.info("id_token", query.id_token);
+    console.info("id_token", redactJwt(query.id_token));
 
     let jws = await parseJwt(query.id_token).catch(die);
+    console.info("jws:");
+    jws.signature = "[redacted]";
+    console.info(jws);
+
+    if (jws.claims.iss.includes(document.location.hostname)) {
+      await doStuffWithUser(query);
+      return;
+    }
 
     if ("https://accounts.google.com" === jws.claims.iss) {
       // TODO make sure we've got the right options for fetch !!!
+      //let tokenUrl = "/api/authn/session/oidc/accounts.google.com";
+      let tokenUrl = "/api/authn/session/oidc/accounts.google.com/token";
       let resp = await window
-        .fetch(baseUrl + "/api/authn/session/oidc/google.com", {
+        .fetch(`${baseUrl}${tokenUrl}`, {
           method: "POST",
           headers: {
-            authorization: query.id_token,
+            Authorization: `Bearer ${query.id_token}`,
           },
         })
         .catch(die);
@@ -299,7 +324,10 @@
       console.info(result);
 
       await doStuffWithUser(result);
+      return;
     }
+
+    window.alert(`unrecognized token issuer '${jws.claims.iss}'`);
     // TODO what if it's not google?
   }
 

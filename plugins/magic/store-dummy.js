@@ -33,6 +33,7 @@ function create() {
         return store._db[id];
       },
   };
+
   return store;
 }
 
