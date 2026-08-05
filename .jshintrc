@@ -1,7 +1,11 @@
 {
-  "esversion": 11,
+  "globals": {
+    "crypto": false
+  },
+  "esversion": 13,
   "node": true,
   "browser": true,
   "unused": "nofunc",
-  "curly": true
+  "curly": true,
+  "sub": true
 }

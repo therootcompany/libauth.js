@@ -1,41 +1,57 @@
 {
-  "name": "auth3000",
-  "version": "0.14.1",
+  "name": "libauth",
+  "version": "0.21.2",
   "description": "Modern, OpenID Connect compatible authentication.",
   "main": "index.js",
-  "files": ["@types", "lib", "verifier", "middleware", "types.js"],
+  "bin": {
+    "libauth": "./bin/libauth.js"
+  },
+  "files": [
+    "@types",
+    "lib",
+    "verifier",
+    "middleware",
+    "types.js"
+  ],
   "scripts": {
+    "bump": "npm version -m \"chore(release): bump to v%s\"",
     "fmt": "npx prettier@2.x -w '**/*.{md,js,html,css}'",
-    "start": "node example/app.js",
     "genenv": "node ./utils/genenv.js",
-    "test": "bash ./test.sh"
+    "lint": "npm run jshint && npm run tsc",
+    "prepublish": "npm run reexport-types",
+    "start": "node example/app.js",
+    "test": "bash ./test.sh",
+    "--------": "-------------------------------------------------",
+    "jshint": "npx -p jshint@2.x -- jshint -c ./.jshintrc ./*.js ./bin/ ./example/ ./lib/ ./middelware/ ./plugins/ ./public/ ./tests/ ./utils/ ./verifier/",
+    "prettier": "npx -p prettier@3.x -- prettier -w '**/*.{js,md}'",
+    "reexport-types": "npx -p jswt@1.x -- reexport",
+    "tsc": "npx -p typescript@5.x -- tsc -p ./jsconfig.json"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/therootcompany/auth3000.git"
+    "url": "git+https://github.com/therootcompany/libauth.git"
   },
   "author": "AJ ONeal <coolaj86@gmail.com> (https://coolaj86.com/)",
   "license": "MPL-2.0",
   "bugs": {
-    "url": "https://github.com/therootcompany/auth3000/issues"
+    "url": "https://github.com/therootcompany/libauth/issues"
   },
-  "homepage": "https://github.com/therootcompany/auth3000#readme",
+  "homepage": "https://github.com/therootcompany/libauth#readme",
   "dependencies": {
-    "@root/async-router": "^1.0.9",
-    "@types/cookie-parser": "^1.4.2",
-    "body-parser": "^1.19.0",
-    "cookie-parser": "^1.4.5",
     "dotenv": "^10.0.0",
-    "express": "^4.17.1",
-    "keyfetch": "^3.0.2",
-    "keypairs": "^1.2.14",
-    "morgan": "^1.10.0"
+    "keyfetch": "^3.0.2"
   },
   "devDependencies": {
+    "@root/async-router": "^1.0.11",
     "@root/request": "^1.7.0",
     "@ryanburnette/authorization": "^4.0.0",
+    "@types/cookie-parser": "^1.4.2",
     "@types/express": "^4.17.13",
-    "@types/node": "^16.7.8",
-    "colors": "^1.4.0"
+    "@types/node": "^16.11.34",
+    "body-parser": "^1.19.0",
+    "colors": "^1.4.0",
+    "cookie-parser": "^1.4.5",
+    "express": "^4.17.1",
+    "morgan": "^1.10.0"
   }
 }

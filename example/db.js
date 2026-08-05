@@ -33,6 +33,7 @@ DB.get = async function (query) {
     }
   }
 
+  console.log("[DEBUG] id", id);
   let user = DB._data.users[id] || null;
   if (!user) {
     // internal error
@@ -44,7 +45,7 @@ DB.get = async function (query) {
     account = user.accounts[query.accountId];
     if (!account) {
       throw new Error(
-        "Unauthorized: not authorized for account '" + query.accountId + "'"
+        "Unauthorized: not authorized for account '" + query.accountId + "'",
       );
     }
   } else {
